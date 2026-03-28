@@ -1,8 +1,8 @@
 import numpy as np
 from numba import float32
-from numba.experimental import jitclass
+from environment.config import jitclass_
 
-@jitclass([
+@jitclass_([
     ("mu", float32),
     ("sigma", float32),
 ])
@@ -45,10 +45,10 @@ class LogNormal(object):
         return np.log(1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2))
 
 
-lognormtype = LogNormal.class_type.instance_type
+#lognormtype = LogNormal.class_type.instance_type
 
 
-@jitclass([
+@jitclass_([
     ("mu", float32),
     ("sigma", float32),
 ])
@@ -91,4 +91,4 @@ class Normal(object):
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
 
 
-normtype = Normal.class_type.instance_type
+#normtype = Normal.class_type.instance_type

@@ -1,9 +1,9 @@
 import numpy as np
 from numba import float32
-from numba.experimental import jitclass
 from numba.typed import Dict
 from numba import types
 
+from environment.config import jitclass_
 from model import Model
 
 theta_type = types.DictType(types.unicode_type, float32)
@@ -45,22 +45,12 @@ JITCLASS_SPEC = [
 ]
 
 
-@jitclass(JITCLASS_SPEC)
+@jitclass_(JITCLASS_SPEC)
 class GlucoseInsulinModel:
     def __init__(self, u2ss, theta=Dict.empty(
         key_type=types.unicode_type,
         value_type=float32,
     )):
-
-        self.G = self._G0
-        self.X = self._X0
-        self.Qsto1 = self._Qsto10
-        self.Qsto2 = self._Qsto20
-        self.Qgut = self._Qgut0
-        self.Isc1 = self._Isc10
-        self.Isc2 = self._Isc20
-        self.Ip = self._Ip0
-        self.IG = self._IG0
 
         self.f = theta["f"] if "f" in theta else np.float32(0.9)
         self.VG = theta["VG"] if "VG" in theta else np.float32(1.45)
@@ -94,7 +84,17 @@ class GlucoseInsulinModel:
         self._Isc10 = np.float32(ki1)
         self._Isc20 = np.float32(ki2)
         self._Ip0 = np.float32(self.Ipb)
-        self._IG0 =self.Gb
+        self._IG0 = self.Gb
+
+        self.G = self._G0
+        self.X = self._X0
+        self.Qsto1 = self._Qsto10
+        self.Qsto2 = self._Qsto20
+        self.Qgut = self._Qgut0
+        self.Isc1 = self._Isc10
+        self.Isc2 = self._Isc20
+        self.Ip = self._Ip0
+        self.IG = self._IG0
 
     def reset(self):
         self.G = self._G0
