@@ -38,7 +38,7 @@ class Twinner():
 
         out = np.zeros(data.cho.shape[0],)
         for k in range(out.shape[0]):
-            model.step([data.cho[k], data.bolus[k]]+data.basal[k])
+            model.step([data.cho[k], data.bolus[k]]+data.basal[k]) # TODO: to have a twinner model agnostic this must become u[k]
             out[k] = model.output()
 
         #out = out[0::5]
