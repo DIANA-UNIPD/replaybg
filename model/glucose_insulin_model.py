@@ -6,7 +6,8 @@ from numba import types
 from environment.config import jitclass_
 from model import Model
 
-theta_type = types.DictType(types.unicode_type, float32)
+theta0_type = types.DictType(types.unicode_type, float32)
+x0_type = types.DictType(types.unicode_type, float32)
 JITCLASS_SPEC = [
     ("_G0", float32),
     ("_X0", float32),
@@ -41,50 +42,52 @@ JITCLASS_SPEC = [
     ("alpha", float32),
     ("Ipb", float32),
     ("u2ss", float32),
-    ("theta", theta_type)
+    ("theta0", theta0_type),
+    ("x0", x0_type)
 ]
 
 
 @jitclass_(JITCLASS_SPEC)
 class GlucoseInsulinModel:
-    def __init__(self, u2ss, theta=Dict.empty(
-        key_type=types.unicode_type,
-        value_type=float32,
-    )):
+    def __init__(self, 
+                 u2ss, 
+                 theta0=Dict.empty(key_type=types.unicode_type, value_type=float32),
+                 x0=Dict.empty(key_type=types.unicode_type, value_type=float32),
+                 ):
 
-        self.f = theta["f"] if "f" in theta else np.float32(0.9)
-        self.VG = theta["VG"] if "VG" in theta else np.float32(1.45)
-        self.VI = theta["VI"] if "VI" in theta else np.float32(0.135)
-        self.alpha = theta["alpha"] if "alpha" in theta else np.float32(7)
+        self.f = theta0["f"] if "f" in theta0 else np.float32(0.9)
+        self.VG = theta0["VG"] if "VG" in theta0 else np.float32(1.45)
+        self.VI = theta0["VI"] if "VI" in theta0 else np.float32(0.135)
+        self.alpha = theta0["alpha"] if "alpha" in theta0 else np.float32(7)
 
-        self.SI = theta["SI"] if "SI" in theta else np.float32(10.35e-4 / self.VG)
-        self.SG = theta["SG"] if "SG" in theta else np.float32(2.5e-2)
-        self.Gb = theta["Gb"] if "Gb" in theta else np.float32(119.13)
-        self.p2 = theta["p2"] if "p2" in theta else np.float32(0.012)
+        self.SI = theta0["SI"] if "SI" in theta0 else np.float32(10.35e-4 / self.VG)
+        self.SG = theta0["SG"] if "SG" in theta0 else np.float32(2.5e-2)
+        self.Gb = theta0["Gb"] if "Gb" in theta0 else np.float32(119.13)
+        self.p2 = theta0["p2"] if "p2" in theta0 else np.float32(0.012)
 
-        self.ka2 = theta["ka2"] if "ka2" in theta else np.float32(0.014)
-        self.kd = theta["kd"] if "kd" in theta else np.float32(0.026)
-        self.ke = theta["ke"] if "ke" in theta else np.float32(0.127)
+        self.ka2 = theta0["ka2"] if "ka2" in theta0 else np.float32(0.014)
+        self.kd = theta0["kd"] if "kd" in theta0 else np.float32(0.026)
+        self.ke = theta0["ke"] if "ke" in theta0 else np.float32(0.127)
 
-        self.kabs = theta["kabs"] if "kabs" in theta else np.float32(0.012)
-        self.kempt = theta["kempt"] if "kempt" in theta else np.float32(0.18)
+        self.kabs = theta0["kabs"] if "kabs" in theta0 else np.float32(0.012)
+        self.kempt = theta0["kempt"] if "kempt" in theta0 else np.float32(0.18)
 
         self.u2ss = np.float32(u2ss)
 
-        self._G0 = np.float32(self.Gb)
-        self._X0 = np.float32(0)
-        self._Qsto10 = np.float32(0)
-        self._Qsto20 = np.float32(0)
-        self._Qgut0 = np.float32(0)
+        self._G0 = x0["G0"] if "G0" in x0 else np.float32(self.Gb)
+        self._X0 = x0["X0"] if "X0" in x0 else np.float32(0)
+        self._Qsto10 = x0["Qsto10"] if "Qsto10" in x0 else np.float32(0)
+        self._Qsto20 = x0["Qsto20"] if "Qsto20" in x0 else np.float32(0)
+        self._Qgut0 = x0["Qgut0"] if "Qgut0" in x0 else np.float32(0)
 
         ki1 = self.u2ss / self.kd
         ki2 = self.kd / self.ka2 * ki1
         self.Ipb = self.ka2 / self.ke * ki2
 
-        self._Isc10 = np.float32(ki1)
-        self._Isc20 = np.float32(ki2)
-        self._Ip0 = np.float32(self.Ipb)
-        self._IG0 = self.Gb
+        self._Isc10 = x0["Isc10"] if "Isc10" in x0 else np.float32(ki1)
+        self._Isc20 = x0["Isc20"] if "Isc20" in x0 else np.float32(ki2)
+        self._Ip0 = x0["Ip0"] if "Ip0" in x0 else np.float32(self.Ipb)
+        self._IG0 = x0["IG0"] if "IG0" in x0 else self.Gb
 
         self.G = self._G0
         self.X = self._X0

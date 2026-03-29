@@ -6,5 +6,6 @@ class RBGData:
         self.glucose = data['glucose'].values
         self.cho = data['cho'].values
         self.bolus = data['bolus'].values
+        self.basal = data['basal'].values
         self.t = data['t'].values
         self.u2ss = np.mean(data.bolus.values)

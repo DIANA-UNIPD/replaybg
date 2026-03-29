@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from data.data import RBGData
-from model.GlucoseInsulinModel import GlucoseInsulinModel
+from model.glucose_insulin_model import GlucoseInsulinModel
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
