@@ -141,9 +141,13 @@ class ReplayBG:
 
         unknown_parameters_prior = {
             'SI': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SG' : {'prior': LogLogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': 1},
             'Gb': {'prior': LogNormal(mu=119.13, sigma=7.11), 'min': 70, 'max': 180},
             'p2': {'prior': LogNormal(mu=0.11, sigma=0.004), 'min': 0, 'max': 1},
             'kabs': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kempt' : {'prior' : LogLogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': 1},
+            'ka2' : {'prior' : LogLogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
+            'kd' : {'prior' : LogLogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': 1},
         }
 
         # Run the twinning procedure

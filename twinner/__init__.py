@@ -43,9 +43,9 @@ class Twinner():
             model.step(data.u[k], k)
             out[k] = model.output()
 
-        out = out[0::5]
+        out = out[0::data.yts] # TODO: make this dynamic
         sdn = 5
-        return -0.5 * np.sum(((out - data.glucose) / sdn) ** 2)
+        return -0.5 * np.sum(((out[data.glucose_idxs] - data.glucose[data.glucose_idxs]) / sdn) ** 2)
 
     def _neg_log_posterior(self, theta, model, data, unknown_parameters_prior):
         return -self._log_posterior(theta, model, data, unknown_parameters_prior)
@@ -53,12 +53,12 @@ class Twinner():
     def _log_posterior(self, theta, model, data, unknown_parameters_prior):
         # thetadict must be a numba typed dict
         thetadict = Dict.empty(key_type=types.unicode_type, value_type=float32)
-        total_jacobian = 0.
+        total_jacobian = 0.0
 
         for i, k in enumerate(unknown_parameters_prior.keys()):
             thetadict[k] = to_constrained(theta[i], unknown_parameters_prior[k]['min'],
                                           unknown_parameters_prior[k]['max'])
-            total_jacobian += log_jacobian_single(thetadict[k], unknown_parameters_prior[k]['min'],
+            total_jacobian += log_jacobian_single(theta[i], unknown_parameters_prior[k]['min'],
                                                   unknown_parameters_prior[k]['max'])
 
         model.reset(thetadict)
@@ -67,5 +67,4 @@ class Twinner():
         if lp == -np.inf:
             return -np.inf
         else:
-            # TODO: fix total jacobian
-            return lp + self._log_likelihood(model, data, ) #+ total_jacobian
+            return lp + self._log_likelihood(model, data, ) + total_jacobian #TODO: check jacobian calculation
