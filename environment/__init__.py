@@ -34,7 +34,7 @@ class Environment:
     def __init__(self,
                  save_name: str = '',
                  save_folder: str = '',
-                 yts: int = 5,
+                 ts: int = 1,
                  seed: int = 42,
                  plot_mode: bool = True,
                  verbose: bool = True
@@ -50,8 +50,8 @@ class Environment:
         save_folder : str, optional, default : ''
             A string used to set the folder where the ReplayBG results will be saved.
 
-        yts: int, optional, default : 5
-            An integer that specifies the data sampling time (in minutes).
+        ts: int, optional, default : 1
+            An integer that specifies the integration time (in minutes).
 
         seed : int, optional, default : 1
             An integer that specifies the random seed. For reproducibility.
@@ -74,8 +74,8 @@ class Environment:
         if not (os.path.exists(os.path.join(self.replay_bg_path, 'results', 'workspaces'))):
             os.mkdir(os.path.join(self.replay_bg_path, 'results', 'workspaces'))
 
-        # Set sample time
-        self.yts = yts
+        # Set integration time
+        self.ts = ts
 
 
         # Set the seed

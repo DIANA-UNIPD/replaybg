@@ -48,12 +48,18 @@ JITCLASS_SPEC = [
 
 @jitclass_(JITCLASS_SPEC)
 class GlucoseInsulinModel:
-    def __init__(self, 
+    def __init__(self,
                  u2ss,
                  theta0=Dict.empty(key_type=types.unicode_type, value_type=float32),
                  x0=Dict.empty(key_type=types.unicode_type, value_type=float32),
                  ):
+        self.u2ss = np.float32(u2ss)
+        self.x0 = x0 # TODO: check if this is the right way to do it
+        self.reset(theta0)
 
+    def reset(self,
+              theta0=Dict.empty(key_type=types.unicode_type, value_type=float32)
+              ):
         self.f = theta0["f"] if "f" in theta0 else np.float32(0.9)
         self.VG = theta0["VG"] if "VG" in theta0 else np.float32(1.45)
         self.VI = theta0["VI"] if "VI" in theta0 else np.float32(0.135)
@@ -71,22 +77,20 @@ class GlucoseInsulinModel:
         self.kabs = theta0["kabs"] if "kabs" in theta0 else np.float32(0.012)
         self.kempt = theta0["kempt"] if "kempt" in theta0 else np.float32(0.18)
 
-        self.u2ss = np.float32(u2ss)
-
-        self._G0 = x0["G0"] if "G0" in x0 else np.float32(self.Gb)
-        self._X0 = x0["X0"] if "X0" in x0 else np.float32(0)
-        self._Qsto10 = x0["Qsto10"] if "Qsto10" in x0 else np.float32(0)
-        self._Qsto20 = x0["Qsto20"] if "Qsto20" in x0 else np.float32(0)
-        self._Qgut0 = x0["Qgut0"] if "Qgut0" in x0 else np.float32(0)
+        self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float32(self.Gb)
+        self._X0 = self.x0["X0"] if "X0" in self.x0 else np.float32(0)
+        self._Qsto10 = self.x0["Qsto10"] if "Qsto10" in self.x0 else np.float32(0)
+        self._Qsto20 = self.x0["Qsto20"] if "Qsto20" in self.x0 else np.float32(0)
+        self._Qgut0 = self.x0["Qgut0"] if "Qgut0" in self.x0 else np.float32(0)
 
         ki1 = self.u2ss / self.kd
         ki2 = self.kd / self.ka2 * ki1
         self.Ipb = self.ka2 / self.ke * ki2
 
-        self._Isc10 = x0["Isc10"] if "Isc10" in x0 else np.float32(ki1)
-        self._Isc20 = x0["Isc20"] if "Isc20" in x0 else np.float32(ki2)
-        self._Ip0 = x0["Ip0"] if "Ip0" in x0 else np.float32(self.Ipb)
-        self._IG0 = x0["IG0"] if "IG0" in x0 else self.Gb
+        self._Isc10 = self.x0["Isc10"] if "Isc10" in self.x0 else np.float32(ki1)
+        self._Isc20 = self.x0["Isc20"] if "Isc20" in self.x0 else np.float32(ki2)
+        self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float32(self.Ipb)
+        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else self.Gb
 
         self.G = self._G0
         self.X = self._X0
@@ -98,24 +102,20 @@ class GlucoseInsulinModel:
         self.Ip = self._Ip0
         self.IG = self._IG0
 
-    def reset(self):
-        self.G = self._G0
-        self.X = self._X0
-        self.Qsto1 = self._Qsto10
-        self.Qsto2 = self._Qsto20
-        self.Qgut = self._Qgut0
-        self.Isc1 = self._Isc10
-        self.Isc2 = self._Isc20
-        self.Ip = self._Ip0
-        self.IG = self._IG0
+    def step(self, u: float32[:], t: float32):
+        """
 
-    def step(self, u: float32[:]):
+        :param u:
+        :param t: minutes since start of simulation
+        :return:
+        """
+
         u_m = u[0]
-        u_i = u[1] + u[2] #TODO: add if to delay meals (tau and beta params)
+        u_i = u[1] + u[2]  # TODO: add if to delay meals (tau and beta params)
 
         dg = -(self.SG + self.X) * self.G + self.SG * self.Gb + self.f * self.kabs * self.Qgut / self.VG
         dx = -self.p2 * (self.X - self.SI * (self.Ip - self.Ipb))
-        dig = - 1/self.alpha * (self.IG - self.G)
+        dig = - 1 / self.alpha * (self.IG - self.G)
 
         dqsto1 = -self.kempt * self.Qsto1 + u_m
         dqsto2 = self.kempt * self.Qsto1 - self.kempt * self.Qsto2
@@ -127,7 +127,7 @@ class GlucoseInsulinModel:
 
         self.G = self.G + dg
         self.X = self.X + dx
-        self.IG = self.X + dig
+        self.IG = self.IG + dig
 
         self.Qsto1 = self.Qsto1 + dqsto1
         self.Qsto2 = self.Qsto2 + dqsto2
@@ -137,11 +137,5 @@ class GlucoseInsulinModel:
         self.Isc2 = self.Isc2 + disc2
         self.Ip = self.Ip + dip
 
-    def input(self):
-        return {
-            0 : 'cho',
-                1 : 'bolus',
-                2 : 'basal'
-                }
     def output(self):
         return self.IG

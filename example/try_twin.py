@@ -4,6 +4,7 @@ from multiprocessing import freeze_support
 import os
 import pandas as pd
 
+from model.glucose_insulin_model import GlucoseInsulinModel
 from replaybg import ReplayBG
 
 if __name__ == '__main__':
@@ -15,13 +16,17 @@ if __name__ == '__main__':
     save_name = 'test'
 
     rbg = ReplayBG(save_folder=save_folder)
-    rbg.twin(data=df, bw=100, save_name=save_name)
+    theta_estimated = rbg.twin(data=df, bw=100, save_name=save_name)
+    out = rbg.replay(data=df,theta=theta_estimated, bw=100, save_name=save_name)
+
+    import matplotlib.pyplot as plt
+    plt.plot(df.glucose)
+    plt.plot(out)
+    plt.show()
 
 
     """
     x0 = [100, ]
-    model = GlucoseInsulinModel(theta=theta_estimated)
-    simulator = Simulator()
-    results = simulator.simulate()
+
 
     print(results)"""
