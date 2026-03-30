@@ -8,6 +8,7 @@ from environment import Environment
 from distributions import LogNormal, LogGamma, LogLogNormal, to_constrained
 from model.glucose_insulin_model import GlucoseInsulinModel
 from twinner import Twinner
+from utils.numba_dicts import to_typed_f32_dict
 
 
 class ReplayBG:
@@ -212,8 +213,11 @@ class ReplayBG:
         rbg_data = T1DData(data=data,
                            environment=self.environment)  # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
 
+        # convert theta to numba typed dict
+        theta_typed = to_typed_f32_dict(theta)
+
         # Initialize model TODO: change this to the model provided in input
-        model = GlucoseInsulinModel(u2ss=rbg_data.u2ss, theta0=theta)  # TODO: can we set u2ss AFTER data?
+        model = GlucoseInsulinModel(u2ss=rbg_data.u2ss, theta0=theta_typed)  # TODO: can we set u2ss AFTER data?
 
         out = np.zeros(rbg_data.tsteps, )
         for k in range(out.shape[0]):

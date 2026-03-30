@@ -2,7 +2,8 @@ import numpy as np
 from scipy.optimize import minimize
 
 from distributions import to_unconstrained, to_constrained, log_jacobian_single
-
+from numba import float32, types
+from numba.typed import Dict
 
 class Twinner():
 
@@ -50,8 +51,8 @@ class Twinner():
         return -self._log_posterior(theta, model, data, unknown_parameters_prior)
 
     def _log_posterior(self, theta, model, data, unknown_parameters_prior):
-        # WARNING: parameters ordering must be consistent with the model
-        thetadict = {}
+        # thetadict must be a numba typed dict
+        thetadict = Dict.empty(key_type=types.unicode_type, value_type=float32)
         total_jacobian = 0.
 
         for i, k in enumerate(unknown_parameters_prior.keys()):
