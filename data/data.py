@@ -8,4 +8,4 @@ class RBGData:
         self.bolus = data['bolus'].values
         self.basal = data['basal'].values
         self.t = data['t'].values
-        self.u2ss = np.mean(data.bolus.values)
+        self.u2ss = np.mean(data.basal.values)

@@ -4,7 +4,6 @@ from numba.typed import Dict
 from numba import types
 
 from environment.config import jitclass_
-from model import Model
 
 theta0_type = types.DictType(types.unicode_type, float32)
 x0_type = types.DictType(types.unicode_type, float32)
@@ -50,7 +49,7 @@ JITCLASS_SPEC = [
 @jitclass_(JITCLASS_SPEC)
 class GlucoseInsulinModel:
     def __init__(self, 
-                 u2ss, 
+                 u2ss,
                  theta0=Dict.empty(key_type=types.unicode_type, value_type=float32),
                  x0=Dict.empty(key_type=types.unicode_type, value_type=float32),
                  ):
@@ -112,7 +111,7 @@ class GlucoseInsulinModel:
 
     def step(self, u: float32[:]):
         u_m = u[0]
-        u_b = u[1]
+        u_i = u[1] + u[2] #TODO: add if to delay meals (tau and beta params)
 
         dg = -(self.SG + self.X) * self.G + self.SG * self.Gb + self.f * self.kabs * self.Qgut / self.VG
         dx = -self.p2 * (self.X - self.SI * (self.Ip - self.Ipb))
@@ -122,7 +121,7 @@ class GlucoseInsulinModel:
         dqsto2 = self.kempt * self.Qsto1 - self.kempt * self.Qsto2
         dqgut = self.kempt * self.Qsto2 - self.kabs * self.Qgut
 
-        disc1 = -self.kd * self.Isc1 + u_b / self.VI
+        disc1 = -self.kd * self.Isc1 + u_i / self.VI
         disc2 = self.kd * self.Isc1 - self.ka2 * self.Isc2
         dip = self.ka2 * self.Isc2 - self.ke * self.Ip
 
@@ -138,5 +137,11 @@ class GlucoseInsulinModel:
         self.Isc2 = self.Isc2 + disc2
         self.Ip = self.Ip + dip
 
+    def input(self):
+        return {
+            0 : 'cho',
+                1 : 'bolus',
+                2 : 'basal'
+                }
     def output(self):
         return self.IG

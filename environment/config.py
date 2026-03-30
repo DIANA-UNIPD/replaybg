@@ -1,7 +1,7 @@
 from numba import njit
 from numba.experimental import jitclass
 
-DEBUG = True
+DEBUG = False
 
 def identity(x=None, **kwargs):
     if callable(x):

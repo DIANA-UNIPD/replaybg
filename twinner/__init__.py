@@ -35,6 +35,7 @@ class Twinner():
     def _log_likelihood(self, theta, model, data, unknown_parameters_prior):
         for i, up in enumerate(unknown_parameters_prior.keys()):
             setattr(model, up, theta[i])
+        # TODO: reset model (e.g., initial conditions must reset and steady-state must be updated)
 
         out = np.zeros(data.cho.shape[0],)
         for k in range(out.shape[0]):

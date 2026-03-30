@@ -129,7 +129,7 @@ class ReplayBG:
         #    print('Creating the digital twin using ' + twinning_method.upper())
 
         # Initialize model TODO: change this to the model provided in input
-        model = GlucoseInsulinModel(u2ss=u2ss)
+        model = GlucoseInsulinModel(u2ss=u2ss) #TODO: can we set u2ss AFTER data?
 
         # Unpack data to optimize performance during simulation
         rbg_data = RBGData(data=data) # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
