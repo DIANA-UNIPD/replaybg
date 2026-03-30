@@ -8,10 +8,10 @@ from replaybg import ReplayBG
 
 if __name__ == '__main__':
     freeze_support()
-    df = pd.read_csv("data.csv")
+    df = pd.read_parquet("data.parquet")
     df['t'] = pd.to_datetime(df['t'])
 
-    save_folder = os.path.join(os.path.abspath(''), '..', '..', '..')
+    save_folder = os.path.join(os.path.abspath(''))
     save_name = 'test'
 
     rbg = ReplayBG(save_folder=save_folder)
@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
     """
     x0 = [100, ]
-    model = GlucoseInsulinModel( theta=theta_estimated)
+    model = GlucoseInsulinModel(theta=theta_estimated)
     simulator = Simulator()
     results = simulator.simulate()
 

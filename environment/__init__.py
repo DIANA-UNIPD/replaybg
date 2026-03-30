@@ -69,10 +69,8 @@ class Environment:
         # Create the results sub folders if they do not exist
         if not (os.path.exists(os.path.join(self.replay_bg_path, 'results'))):
             os.mkdir(os.path.join(self.replay_bg_path, 'results'))
-        if not (os.path.exists(os.path.join(self.replay_bg_path, 'results', 'mcmc'))):
-            os.mkdir(os.path.join(self.replay_bg_path, 'results', 'mcmc'))
-        if not (os.path.exists(os.path.join(self.replay_bg_path, 'results', 'map'))):
-            os.mkdir(os.path.join(self.replay_bg_path, 'results', 'map'))
+        if not (os.path.exists(os.path.join(self.replay_bg_path, 'results', 'twins'))):
+            os.mkdir(os.path.join(self.replay_bg_path, 'results', 'twins'))
         if not (os.path.exists(os.path.join(self.replay_bg_path, 'results', 'workspaces'))):
             os.mkdir(os.path.join(self.replay_bg_path, 'results', 'workspaces'))
 
