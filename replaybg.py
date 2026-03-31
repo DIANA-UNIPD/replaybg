@@ -7,7 +7,7 @@ from data.t1ddata import T1DData
 from environment import Environment
 from distributions import LogNormal, LogGamma, LogLogNormal, to_constrained
 from model.glucose_insulin_model import GlucoseInsulinModel
-from twinner import Twinner
+from twinner.twinner import Twinner
 from utils.numba_dicts import to_typed_f32_dict
 
 
@@ -228,6 +228,6 @@ class ReplayBG:
             model.step(rbg_data.u[k], k)
             out[k] = model.output()
 
-        out = out[0::5]
+        out = out[0::rbg_data.yts]
 
         return out

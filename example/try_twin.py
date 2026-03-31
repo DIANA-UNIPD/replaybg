@@ -17,16 +17,10 @@ if __name__ == '__main__':
 
     rbg = ReplayBG(save_folder=save_folder)
     theta_estimated = rbg.twin(data=df, bw=100, save_name=save_name)
+    print(theta_estimated)
     out = rbg.replay(data=df,theta=theta_estimated, bw=100, save_name=save_name)
 
     import matplotlib.pyplot as plt
     plt.plot(df.glucose)
     plt.plot(out)
     plt.show()
-
-
-    """
-    x0 = [100, ]
-
-
-    print(results)"""
