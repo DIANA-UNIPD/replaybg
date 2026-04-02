@@ -1,5 +1,5 @@
 import numpy as np
-from numba import float32, types
+from numba import float64, types
 from numba.typed import Dict
 
 
@@ -25,13 +25,13 @@ def to_typed_f32_dict(src=None, *, strict=False) -> Dict:
         TypeError: If ``strict`` is ``True`` and a key/value pair cannot be
             converted to ``str``/``float32``.
     """
-    out = Dict.empty(key_type=types.unicode_type, value_type=float32)
+    out = Dict.empty(key_type=types.unicode_type, value_type=float64)
     if src is None:
         return out
 
     for k, v in src.items():
         try:
-            out[str(k)] = np.float32(v)
+            out[str(k)] = np.float64(v)
         except Exception:
             if strict:
                 raise TypeError(f"Cannot cast key={k!r}, value={v!r} to float32")

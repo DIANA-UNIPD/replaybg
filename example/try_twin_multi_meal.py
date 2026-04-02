@@ -9,9 +9,8 @@ from replaybg import ReplayBG
 
 if __name__ == '__main__':
     freeze_support()
-    df = pd.read_parquet("data.parquet")
+    df = pd.read_parquet("data_day_1.parquet")
     df['t'] = pd.to_datetime(df['t'])
-
     save_folder = os.path.join(os.path.abspath(''))
     save_name = 'test'
 

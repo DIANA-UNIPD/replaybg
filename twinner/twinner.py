@@ -5,12 +5,12 @@ from scipy.optimize import minimize
 
 from distributions import to_unconstrained, to_constrained, log_jacobian_single
 
-from numba import float32, types
+from numba import float64, types
 from numba.typed import Dict
 
 
 class Twinner():
-    """Estimate model parameters by maximizing a posterior objective.
+    """Estimate model parameters by maximizing a posterior objective (MAP estimation).
 
     The twinning procedure searches for the most likely set of model
     parameters given observed data and prior distributions. Parameters are
@@ -25,7 +25,7 @@ class Twinner():
         """Initialize a ``Twinner`` instance."""
         pass
 
-    def twin(self, model : Any, data, unknown_parameters_prior):
+    def twin(self, model : Any, data, unknown_parameters_prior, environment) -> dict:
         """Run twinning estimation for a model.
 
         The method builds an initial guess from the current model parameters,
@@ -45,26 +45,44 @@ class Twinner():
                 - ``max``: upper bound for the parameter
 
         Returns:
-            dict: A dictionary containing the optimization result:
+            ret: A dictionary containing the optimization result:
                 - ``fun``: Final objective value.
                 - ``x``: Optimized parameter values in unconstrained space.
         """
-        start_guess = []
-        for k, v in unknown_parameters_prior.items():
-            start_guess.append(to_unconstrained(getattr(model, k), v['min'],
-                                                v['max']))
-        start_guess = np.array(start_guess)
 
         options = dict()
         options['maxiter'] = 100000
         options['maxfev'] = 100000
         options['disp'] = True
+        """
+        best = None
+        for _ in range(10):
+            # random start within each parameter's range
+            start_guess = []
+            for k, v in unknown_parameters_prior.items():
+                theta_rand = np.random.uniform(v['min'], v['max']) # TODO: change with sample method
+                start_guess.append(to_unconstrained(theta_rand, v['min'], v['max']))
 
-        result = minimize(self._neg_log_posterior, start_guess, method='Powell',
+            result = minimize(self._neg_log_posterior, start_guess,
+                              method='Powell', args=(model, data, unknown_parameters_prior), options=options)
+
+            if best is None or result.fun < best.fun:
+                best = result
+        """
+        # TODO: add multiple start guesses
+        # TODO: parallelize over start_guesses. It must use a parallelize flag and a n_cores parameters to organize it
+        rng = np.random.default_rng(environment.seed)
+        start_guess = []
+        for k, v in unknown_parameters_prior.items():
+            start_guess.append(to_unconstrained(getattr(model, k), v['min'],
+                                                v['max']))
+        start_guess = np.array(start_guess)
+        best = minimize(self._neg_log_posterior, start_guess, method='Powell',
                           args=(model, data, unknown_parameters_prior,), options=options)
+
         ret = dict()
-        ret['fun'] = result.fun
-        ret['x'] = result.x
+        ret['fun'] = best.fun
+        ret['x'] = best.x
 
         return ret
 
@@ -102,11 +120,12 @@ class Twinner():
         out = np.zeros(data.tsteps, )
         for k in range(out.shape[0]):
             model.step(data.u[k], k)
+            # TODO: add the possibiliy to track oall the states during twinning (mainly for debugging)
             out[k] = model.output()
 
-        out = out[0::data.yts] # TODO: make this dynamic
-        sdn = 5
-        return -0.5 * np.sum(((out[data.glucose_idxs] - data.glucose[data.glucose_idxs]) / sdn) ** 2)
+        out = out[0::data.yts]
+        sdn = 5 #TODO: mettere da altra parte
+        return -0.5 * np.sum(((out[data.glucose_idxs] - data.glucose[data.glucose_idxs]) / sdn) ** 2) #TODO: far diventare data.glucose => data.y e data.glucose_idxs => data.y_idxs
 
     def _neg_log_posterior(self, theta, model, data, unknown_parameters_prior):
         """Return the negative log posterior for optimization.
@@ -141,7 +160,7 @@ class Twinner():
             float: Log posterior value, or ``-np.inf`` if the prior is invalid.
         """
         # thetadict must be a numba typed dict
-        thetadict = Dict.empty(key_type=types.unicode_type, value_type=float32)
+        thetadict = Dict.empty(key_type=types.unicode_type, value_type=float64)
         total_jacobian = 0.0
 
         for i, k in enumerate(unknown_parameters_prior.keys()):
@@ -152,8 +171,10 @@ class Twinner():
 
         model.reset(thetadict)
         lp = self._log_prior(model, unknown_parameters_prior)
-        print(model.Gb)
         if lp == -np.inf:
             return -np.inf
         else:
-            return lp + self._log_likelihood(model, data, ) + total_jacobian #TODO: check jacobian calculation
+            ll = self._log_likelihood(model, data, )
+            if ll == -np.inf:
+                return -np.inf
+            return lp + ll + total_jacobian #TODO: study the theory behind the jacobian

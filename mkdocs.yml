@@ -1,5 +1,5 @@
 site_name: replaybg
-site_description: Replay background simulation
+site_description: ReplayBG digital twinning framework
 
 theme:
   name: material
@@ -9,7 +9,14 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [.]  # root of your project
+          paths: [.]
+          options:
+            members_order: source
+            show_if_no_docstring: true
+            show_source: true
+            docstring_style: google
+            filters:
+              - "!^__(?!init)"    # hide dunder except __init__
 
 nav:
   - Home: index.md

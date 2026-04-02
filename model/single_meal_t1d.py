@@ -47,7 +47,7 @@ JITCLASS_SPEC = [
 
 
 @jitclass_(JITCLASS_SPEC)
-class GlucoseInsulinModel:
+class SingleMealT1DModel:
     def __init__(self,
                  u2ss,
                  theta0=Dict.empty(key_type=types.unicode_type, value_type=float32),

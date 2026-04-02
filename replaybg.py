@@ -4,9 +4,12 @@ import numpy as np
 import pandas as pd
 
 from data.t1ddata import T1DData
+from data.multi_meal_t1d_data import MultiMealT1DData
+
 from environment import Environment
 from distributions import LogNormal, LogGamma, LogLogNormal, to_constrained
-from model.glucose_insulin_model import GlucoseInsulinModel
+from model.single_meal_t1d import SingleMealT1DModel
+from model.multi_meal_t1d import MultiMealT1DModel
 from twinner.twinner import Twinner
 from utils.numba_dicts import to_typed_f32_dict
 
@@ -82,6 +85,7 @@ class ReplayBG:
     def twin(self, data: pd.DataFrame, bw: float, save_name: str,
              # twinning_method: str = 'mcmc', TODO: <-- this will become "custom_twinner : object = None" so user can pass their own Twinner
              # model: TODO: <-- this will become "model : object = None" so user can pass their own model
+
              u2ss: float | None = None, x0: Dict | None = None,
              # previous_data_name: str | None = None, # TODO: decide whether we still need it
              parallelize: bool = False, n_processes: int | None = None,
@@ -124,27 +128,32 @@ class ReplayBG:
         --------
         None
         """
-        # TODO: valida the inputs
+        # TODO: validate the inputs
 
         # if self.environment.verbose:
         #    print('Creating the digital twin using ' + twinning_method.upper())
 
         # Unpack data to optimize performance during simulation
-        rbg_data = T1DData(data=data,
-                           environment=self.environment)  # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
+        rbg_data = MultiMealT1DData(data=data,
+                           environment=self.environment)
 
         # Initialize model TODO: change this to the model provided in input
-        model = GlucoseInsulinModel(u2ss=rbg_data.u2ss)  # TODO: can we set u2ss AFTER data?
+        model = MultiMealT1DModel(u2ss=rbg_data.u2ss)
 
         # Initialize the twinner
         twinner = Twinner()
 
+        # TODO: "togliere un Log" qui e metterlo nel calcolo della logprior
         unknown_parameters_prior = {
-            'SI': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SI_B': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SI_L': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SI_D': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
             'SG' : {'prior': LogLogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': 1},
             'Gb': {'prior': LogNormal(mu=119.13, sigma=7.11), 'min': 70, 'max': 180},
             'p2': {'prior': LogNormal(mu=0.11, sigma=0.004), 'min': 0, 'max': 1},
-            'kabs': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kabs_L': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kabs_D': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kabs_S': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
             'kempt' : {'prior' : LogLogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': 1},
             'ka2' : {'prior' : LogLogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
             'kd' : {'prior' : LogLogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': 1},
@@ -153,8 +162,9 @@ class ReplayBG:
         # Run the twinning procedure
         theta_estimated = twinner.twin(model=model,
                                        data=rbg_data,
-                                       unknown_parameters_prior=unknown_parameters_prior)
-        print(theta_estimated['fun'], to_constrained(theta_estimated['x']))
+                                       unknown_parameters_prior=unknown_parameters_prior,
+                                       environment=self.environment)
+
         theta_phi = {}
         for i, k in enumerate(unknown_parameters_prior.keys()):
             theta_phi[k] = to_constrained(theta_estimated['x'][i], unknown_parameters_prior[k]['min'],
@@ -208,20 +218,20 @@ class ReplayBG:
         --------
         None
         """
-        # TODO: valida the inputs
+        # TODO: validate the inputs
 
         # if self.environment.verbose:
         #    print('Creating the digital twin using ' + twinning_method.upper())
 
         # Unpack data to optimize performance during simulation
-        rbg_data = T1DData(data=data,
+        rbg_data = MultiMealT1DData(data=data,
                            environment=self.environment)  # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
 
         # convert theta to numba typed dict
         theta_typed = to_typed_f32_dict(theta)
 
         # Initialize model TODO: change this to the model provided in input
-        model = GlucoseInsulinModel(u2ss=rbg_data.u2ss, theta0=theta_typed)  # TODO: can we set u2ss AFTER data?
+        model = MultiMealT1DModel(u2ss=rbg_data.u2ss, theta0=theta_typed)  # TODO: can we set u2ss AFTER data?
 
         out = np.zeros(rbg_data.tsteps, )
         for k in range(out.shape[0]):
