@@ -17,21 +17,21 @@ class LogNormal(object):
 
     def evaluate(self, x):
         """
-        Computes the logarithm of the normal pdf evaluated at given x with given mu and sigma.
+        Computes the logarithm of the lognormal pdf evaluated at given x with given mu and sigma.
 
         Parameters
         ----------
         x: float
-            The value where to evaluate the normal pdf.
+            The value where to evaluate the lognormal pdf. Must be positive.
         mu: float
-            The mean of the normal distribution.
+            The mean of the underlying normal distribution (i.e. of log(x)).
         sigma: float
-            The standard deviation of the normal distribution.
+            The standard deviation of the underlying normal distribution (i.e. of log(x)).
 
         Returns
         -------
-        l_norm: float
-            The logarithm of the normal pdf evaluated at given x with given mu and sigma.
+        l_lognorm: float
+            The lognormal pdf evaluated at given x with given mu and sigma.
 
         Raises
         ------
@@ -45,16 +45,23 @@ class LogNormal(object):
         --------
         None
         """
-        return np.log(1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2))
+        return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((np.log(x) - self.mu) / self.sigma) ** 2)
 
-    def sample(self, rng: np.random.Generator, min: float, max: float):
+    def sample(self, min_val, max_val):
         """
-        Samples the lognormal distribution returning a single sample.
+        Draws a random sample from the lognormal distribution within [min_val, max_val].
+
+        Parameters
+        ----------
+        min_val: float
+            The minimum allowed sampled value.
+        max_val: float
+            The maximum allowed sampled value.
 
         Returns
         -------
         sample: float
-            The sampled value from the lognormal distribution.
+            A random sample drawn from LogNormal(mu, sigma) clipped to [min_val, max_val].
 
         Raises
         ------
@@ -68,68 +75,7 @@ class LogNormal(object):
         --------
         None
         """
-        if rng is None:
-            rng = np.random.default_rng()
-        a, b = (min - self.mu) / self.sigma, (max - self.mu) / self.sigma
-        return truncnorm(a, b, loc=self.mu, scale=self.sigma).rvs(random_state=rng)
-
-
-@jitclass_([
-    ("mu", float64),
-    ("sigma", float64),
-])
-class LogLogNormal(object):
-
-    def __init__(self, mu, sigma):
-        self.mu = mu
-        self.sigma = sigma
-
-    def evaluate(self, x):
-        """
-        Computes the logarithm of the normal pdf evaluated at given x with given mu and sigma.
-
-        Parameters
-        ----------
-        x: float
-            The value where to evaluate the normal pdf.
-        mu: float
-            The mean of the normal distribution.
-        sigma: float
-            The standard deviation of the normal distribution.
-
-        Returns
-        -------
-        l_norm: float
-            The logarithm of the normal pdf evaluated at given x with given mu and sigma.
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
-        """
-        return np.log(1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(
-            - ((np.log(x) - self.mu) ** 2) / (2 * (self.sigma ** 2))))
-
-    def sample(self, rng: np.random.Generator, min: float, max: float):
-        """
-        Samples the lognormal distribution to a return a single sample.
-        #TODO: we are removing a "Log" from the type of distribution. Fix
-        :return:
-        """
-        if rng is None:
-            rng = np.random.default_rng()
-        sample =  rng.lognormal(self.mu, self.sigma)
-        while sample < min or sample > max:
-            sample = rng.lognormal(self.mu, self.sigma)
-        return sample
-
+        return min(max(np.random.lognormal(self.mu, self.sigma), min_val), max_val)
 
 @jitclass_([
     ("mu", float64),
@@ -173,38 +119,21 @@ class Normal(object):
         """
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
 
-    def sample(self, rng: np.random.Generator, min: float, max: float):
-        if rng is None:
-            rng = np.random.default_rng()
-        a, b = (min - self.mu) / self.sigma, (max - self.mu) / self.sigma
-        return truncnorm(a, b, loc=self.mu, scale=self.sigma).rvs(random_state=rng)
-
-@jitclass_([
-    ("alpha", float64),
-    ("beta", float64),
-])
-class LogGamma(object):
-    def __init__(self, alpha, beta):
-        self.alpha = alpha
-        self.beta = beta
-
-    def evaluate(self, x):
+    def sample(self, min_val, max_val):
         """
-        Computes the logarithm of the gamma pdf evaluated at given x with given alpha and beta.
+        Draws a random sample from the normal distribution within [min_val, max_val].
 
         Parameters
         ----------
-        x: float
-            The value where to evaluate the normal pdf.
-        alpha: float
-            The alpha value of the gamma distribution at hand.
-        beta: float
-            The beta value of the gamma distribution at hand.
+        min_val: float
+            The minimum allowed sampled value.
+        max_val: float
+            The maximum allowed sampled value.
 
         Returns
         -------
-        l_gam: float
-            The logarithm of the gamma pdf evaluated at given x with given alpha and beta.
+        sample: float
+            A random sample drawn from Normal(mu, sigma) clipped to [min_val, max_val].
 
         Raises
         ------
@@ -218,20 +147,67 @@ class LogGamma(object):
         --------
         None
         """
-        return -np.inf if x < 0 else np.log(
-            (self.beta ** self.alpha * x ** (self.alpha - 1) * np.exp(-self.beta * x)) / math.gamma(self.alpha))
+        return min(max(np.random.normal(self.mu, self.sigma), min_val), max_val)
 
-    def sample(self, rng: np.random.Generator, min: float, max: float):
-        """
-        Samples the gamma distribution to return a value.
+@jitclass_([
+    ("alpha", float64),
+    ("beta", float64),
+    ("_log_normalizer", float64),
+])
+class Gamma:
 
+    def __init__(self, alpha, beta):
+        self.alpha = alpha
+        self.beta = beta  # rate parameterization (beta = 1/scale)
+        self._log_normalizer = alpha * np.log(beta) - _gammaln(alpha)
+
+    def evaluate(self, x):
         """
-        if rng is None:
-            rng = np.random.default_rng()
-        sample =  rng.gamma(self.alpha, scale=self.beta)
-        while sample < min or sample > max:
-            sample = rng.gamma(self.alpha, scale=self.beta)
-        return sample
+        Gamma pdf evaluated at x.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate. Must be > 0.
+
+        Returns
+        -------
+        float
+            Probability density. Returns 0.0 if x <= 0.
+        """
+        if x <= 0:
+            return 0.0
+        return np.exp(self._log_normalizer + (self.alpha - 1) * np.log(x) - self.beta * x)
+
+    def sample(self, min_val, max_val):
+        """
+        Draws a random sample from the gamma distribution within [min_val, max_val].
+
+        Parameters
+        ----------
+        min_val : float
+            The minimum allowed sampled value.
+        max_val : float
+            The maximum allowed sampled value.
+
+        Returns
+        -------
+        sample : float
+            A random sample drawn from Gamma(alpha, beta) clipped to [min_val, max_val].
+
+        Raises
+        ------
+        None
+
+        See Also
+        --------
+        None
+
+        Examples
+        --------
+        None
+        """
+        return min(max(np.random.gamma(self.alpha, 1.0 / self.beta), min_val), max_val)
 
 @njit_
 def to_constrained(x, a=0, b=1):
@@ -262,3 +238,23 @@ def to_unconstrained(x, a, b):
 def log_jacobian_single(x, a, b):
     s = 1 / (1 + np.exp(-x))
     return np.log((b - a) * s * (1 - s))
+
+@njit_
+def _gammaln(x):
+    """Lanczos approximation of log-gamma, valid for x > 0."""
+    coeffs = np.array([
+         76.18009172947146,
+        -86.50532032941677,
+         24.01409824083091,
+         -1.231739572450155,
+          0.1208650973866179e-2,
+         -0.5395239384953e-5
+    ])
+    y = x
+    tmp = x + 5.5
+    tmp -= (x + 0.5) * np.log(tmp)
+    ser = 1.000000000190015
+    for c in coeffs:
+        y += 1.0
+        ser += c / y
+    return -tmp + np.log(2.5066282746310005 * ser / x)

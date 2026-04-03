@@ -179,7 +179,7 @@ class MultiMealT1DModel:
         self.Ip = self._Ip0
         self.IG = self._IG0
 
-    def step(self, u: float64[:], t: float64):
+    def step_forward(self, u: float64[:], t: float64):
         """
 
         :param u:
@@ -214,7 +214,7 @@ class MultiMealT1DModel:
             risk = 1.0 + 10 * self.r1 * diff * diff
         else:
             risk = 1.0
-
+        risk =1
         dg = (-(self.SG + risk * self.X) * self.G + self.SG * self.Gb + self.f * (
                 self.kabs_B * self.Qgut_B +
                 self.kabs_L * self.Qgut_L +
@@ -275,6 +275,77 @@ class MultiMealT1DModel:
         self.Isc1 = self.Isc1 + disc1
         self.Isc2 = self.Isc2 + disc2
         self.Ip = self.Ip + dip
+
+    def step(self, u: float64[:], t: float64):
+        """
+
+        :param u:
+        :param t: minutes since start of simulation
+        :return:
+        """
+
+        u_m_b = u[0] # TODO: add if to delay meals (tau and beta params)
+        u_m_l = u[1]
+        u_m_d = u[2]
+        u_m_s = u[3]
+        u_m_h = u[4]
+        u_i = u[5] + u[6]
+        u_h = u[7]
+
+        if u_h < 4 or u_h >= 17:
+            SI = self.SI_D
+        elif 4 <= u_h < 11:
+            SI = self.SI_B
+        else:
+            SI = self.SI_L
+
+        g_prev = self.G
+        logGb = np.log(self.Gb)
+        log60 = np.log(60.0)
+        if (g_prev < self.Gb) and (g_prev >= 60.0):
+            lg = np.log(g_prev)
+            diff = lg ** self.r2 - logGb ** self.r2
+            risk = 1.0 + 10 * self.r1 * diff * diff
+        elif g_prev < 60.0:
+            diff = log60 ** self.r2 - logGb ** self.r2  # constant
+            risk = 1.0 + 10 * self.r1 * diff * diff
+        else:
+            risk = 1.0
+        risk =1
+
+        k1 = 1.0 / (1.0 + self.kempt)
+        k2 = 1.0 / (1.0 + self.kempt)
+        kd_fac = 1.0 / (1.0 + self.kd)
+
+        self.Qsto1_B = (self.Qsto1_B + u_m_b) * k1
+        self.Qsto2_B = (self.Qsto2_B + self.kempt * self.Qsto1_B) * k2
+        self.Qgut_B = (self.Qgut_B + self.kempt * self.Qsto2_B) / (1 + self.kabs_B)
+
+        self.Qsto1_L = (self.Qsto1_L + u_m_l) * k1
+        self.Qsto2_L = (self.Qsto2_L + self.kempt * self.Qsto1_L) * k2
+        self.Qgut_L = (self.Qgut_L + self.kempt * self.Qsto2_L) / (1 + self.kabs_L)
+
+        self.Qsto1_D = (self.Qsto1_D + u_m_d) * k1
+        self.Qsto2_D = (self.Qsto2_D + self.kempt * self.Qsto1_D) * k2
+        self.Qgut_D = (self.Qgut_D + self.kempt * self.Qsto2_D) / (1 + self.kabs_D)
+
+        self.Qsto1_S = (self.Qsto1_S + u_m_s) * k1
+        self.Qsto2_S = (self.Qsto2_S + self.kempt * self.Qsto1_S) * k2
+        self.Qgut_S = (self.Qgut_S + self.kempt * self.Qsto2_S) / (1 + self.kabs_S)
+
+        self.Qsto1_H = (self.Qsto1_H + u_m_h) * k1
+        self.Qsto2_H = (self.Qsto2_H + self.kempt * self.Qsto1_H) * k2
+        self.Qgut_H = (self.Qgut_H + self.kempt * self.Qsto2_H) / (1 + self.kabs_H)
+
+        self.Isc1 = (self.Isc1 + u_i) * kd_fac
+        self.Isc2 = (self.Isc2 + self.kd * self.Isc1) / (1 + self.ka2)
+        self.Ip = (self.Ip + self.ka2 * self.Isc2) / (1 + self.ke)
+
+        self.X = (self.X + self.p2 * (SI / self.VI) * (self.Ip - self.Ipb)) / (1 + self.p2)
+        self.G = (self.G + self.SG * self.Gb + self.f * (
+                self.kabs_B * self.Qgut_B + self.kabs_L * self.Qgut_L + self.kabs_D * self.Qgut_D +
+                self.kabs_S * self.Qgut_S + self.kabs_H * self.Qgut_H) / self.VG) / (1 + self.SG + risk * self.X)
+        self.IG = (self.alpha * self.IG + self.G) / (1 + self.alpha)
 
     def output(self):
         return self.IG

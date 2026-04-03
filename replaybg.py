@@ -7,8 +7,7 @@ from data.t1ddata import T1DData
 from data.multi_meal_t1d_data import MultiMealT1DData
 
 from environment import Environment
-from distributions import LogNormal, LogGamma, LogLogNormal, to_constrained
-from model.single_meal_t1d import SingleMealT1DModel
+from distributions import Normal, Gamma, LogNormal
 from model.multi_meal_t1d import MultiMealT1DModel
 from twinner.twinner import Twinner
 from utils.numba_dicts import to_typed_f32_dict
@@ -145,18 +144,20 @@ class ReplayBG:
 
         # TODO: "togliere un Log" qui e metterlo nel calcolo della logprior
         unknown_parameters_prior = {
-            'SI_B': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
-            'SI_L': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
-            'SI_D': {'prior': LogGamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
-            'SG' : {'prior': LogLogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': 1},
-            'Gb': {'prior': LogNormal(mu=119.13, sigma=7.11), 'min': 70, 'max': 180},
-            'p2': {'prior': LogNormal(mu=0.11, sigma=0.004), 'min': 0, 'max': 1},
-            'kabs_L': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
-            'kabs_D': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
-            'kabs_S': {'prior': LogLogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
-            'kempt' : {'prior' : LogLogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': 1},
-            'ka2' : {'prior' : LogLogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
-            'kd' : {'prior' : LogLogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': 1},
+            'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 180},
+            'SG': {'prior': LogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': .5},
+            'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': 1},
+            'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
+            'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': 1},
+            'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': 1},
+            'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SI_L': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'SI_D': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': 1},
+            'kabs_L': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kabs_D': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+            'kabs_S': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': 1},
+
+
         }
 
         # Run the twinning procedure
@@ -167,8 +168,7 @@ class ReplayBG:
 
         theta_phi = {}
         for i, k in enumerate(unknown_parameters_prior.keys()):
-            theta_phi[k] = to_constrained(theta_estimated['x'][i], unknown_parameters_prior[k]['min'],
-                                          unknown_parameters_prior[k]['max'])
+            theta_phi[k] = theta_estimated['x'][i]
 
         return dict(zip(unknown_parameters_prior.keys(), theta_phi.values()))
 
