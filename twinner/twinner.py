@@ -5,9 +5,15 @@ from scipy.optimize import minimize
 
 from distributions import to_unconstrained, to_constrained, log_jacobian_single
 
+import warnings
+
+from tqdm import tqdm
+import multiprocessing
 from numba import float64, types
 from numba.typed import Dict
 
+warnings.catch_warnings()
+warnings.simplefilter("ignore")
 
 class Twinner():
     """Estimate model parameters by maximizing a posterior objective (MAP estimation).
@@ -21,8 +27,12 @@ class Twinner():
         None
     """
 
-    def __init__(self):
+    def __init__(self, parallelize: bool = True):
         """Initialize a ``Twinner`` instance."""
+        self.parallelize = parallelize
+        self.n_jobs = -1
+        self.n_starts = 64
+
 
     def twin(self, model : Any, data, unknown_parameters_prior, environment) -> dict:
         """Run twinning estimation for a model.
@@ -49,27 +59,23 @@ class Twinner():
                 - ``x``: Optimized parameter values in unconstrained space.
         """
 
-        # TODO: parallelize over start_guesses. It must use a parallelize flag and a n_cores parameters to organize it
-        n_starts = 32
-        best = None
+        global _worker_args
+        _worker_args = (self._neg_log_posterior, unknown_parameters_prior, model, data)
 
-        for i in range(n_starts):
-            print(i)
-            start_guess = []
-            for k, v in unknown_parameters_prior.items():
-                start_guess.append(v['prior'].sample(v['min'], v['max']))
-            start_guess = np.array(start_guess)
+        n_jobs = multiprocessing.cpu_count() if self.n_jobs == -1 else self.n_jobs
 
-            result = minimize(self._neg_log_posterior, start_guess, method='Powell',
-                              args=(model, data, unknown_parameters_prior,),
-                              options={
-                                  'maxiter': 100000,
-                                  'maxfev': 100000,
-                                  'disp': True
-                              })
+        if self.parallelize:
+            ctx = multiprocessing.get_context('fork')
+            with ctx.Pool(processes=n_jobs) as pool:
+                results = list(tqdm(
+                    pool.imap(_single_start, range(self.n_starts)),
+                    total=self.n_starts,
+                    desc='Twinning'
+                ))
+        else:
+            results = [_single_start(i) for i in tqdm(range(self.n_starts), desc='Twinning')]
 
-            if best is None or result.fun < best.fun:
-                best = result
+        best = min(results, key=lambda r: r.fun)
 
         ret = dict()
         ret['fun'] = best.fun
@@ -88,12 +94,16 @@ class Twinner():
         Returns:
             float: Sum of log prior contributions for all parameters.
         """
+        # Iterate over the parameters and compute the log prior
         lp = 0
         for up, v in unknown_parameters_prior.items():
             parameter_value = getattr(model, up)
+            # If the parameter is outside the valid range, return -inf
             if parameter_value > v['max'] or parameter_value < v['min']:
                 return -np.inf
+            # Otherwise, add the log prior contribution
             lp += np.log(v['prior'].evaluate(parameter_value))
+        # Return the sum of log prior contributions
         return lp
 
     def _log_likelihood(self, model, data, ):
@@ -111,16 +121,18 @@ class Twinner():
         Returns:
             float: Log likelihood value for the simulated trajectory.
         """
+        # Simulate the model forward and get the output
         out = np.zeros(data.tsteps, )
         for k in range(out.shape[0]):
             model.step(data.u[k], k)
             out[k] = model.output()
-
+        # Subsample the output to match the sampling rate of the data
         out = out[0::data.yts]
-        cv = 0.05  # constant coefficient of variation (5%)
 
-        residuals = out[data.glucose_idxs] - data.glucose[data.glucose_idxs]
-        sdn = cv * np.abs(out[data.glucose_idxs])
+        # Calculate the log-likelihood with a Gaussian error model (constant coefficient of variation)
+        cv = 0.05  # constant coefficient of variation (5%) #TODO: make this a parameter
+        residuals = out[data.y_idxs] - data.y[data.y_idxs]
+        sdn = cv * np.abs(out[data.y_idxs])
         return -0.5 * np.sum((residuals / sdn) ** 2)
 
     def _neg_log_posterior(self, theta, model, data, unknown_parameters_prior):
@@ -136,6 +148,7 @@ class Twinner():
         Returns:
             float: Negative log posterior value.
         """
+        # Just return the negative log-posterior
         return -self._log_posterior(theta, model, data, unknown_parameters_prior)
 
     def _log_posterior(self, theta, model, data, unknown_parameters_prior):
@@ -155,27 +168,40 @@ class Twinner():
         Returns:
             float: Log posterior value, or ``-np.inf`` if the prior is invalid.
         """
-        # thetadict must be a numba typed dict
-        thetadict = Dict.empty(key_type=types.unicode_type, value_type=float64)
 
-        reparametrize = False
-        total_jacobian = 0.0
-
+        # Create the theta input dictionary (note: order is maintained by construction)
+        theta_dict = Dict.empty(key_type=types.unicode_type, value_type=float64)
         for i, k in enumerate(unknown_parameters_prior.keys()):
-            if reparametrize:
-                thetadict[k] = to_constrained(theta[i], unknown_parameters_prior[k]['min'],
-                                              unknown_parameters_prior[k]['max'])
-                total_jacobian += log_jacobian_single(theta[i], unknown_parameters_prior[k]['min'],
-                                                      unknown_parameters_prior[k]['max'])
-            else:
-                thetadict[k] = theta[i]
+                theta_dict[k] = theta[i]
 
+        # Reset the model with the new parameters
+        model.reset(theta_dict)
 
-        model.reset(thetadict)
+        # Calculate log-prior
         lp = self._log_prior(model, unknown_parameters_prior)
         if lp == -np.inf or np.isnan(lp):
             return -np.inf
+        # Calculate log-likelihood
         ll = self._log_likelihood(model, data)
         if ll == -np.inf or np.isnan(ll):
             return -np.inf
-        return lp + ll + total_jacobian #TODO: study the theory behind the jacobian
+
+        # Return log-posterior
+        return lp + ll
+
+
+_worker_args = None
+
+def _single_start(_):
+    neg_log_posterior_fn, unknown_parameters_prior, model, data = _worker_args
+    start_guess = np.array([v['prior'].sample(v['min'], v['max'])
+                             for v in unknown_parameters_prior.values()])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return minimize(neg_log_posterior_fn, start_guess, method='Powell',
+                        args=(model, data, unknown_parameters_prior,),
+                        options={
+                            'maxiter': 100000,
+                            'maxfev': 100000,
+                            'disp': False
+                        })

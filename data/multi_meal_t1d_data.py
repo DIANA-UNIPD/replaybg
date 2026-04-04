@@ -75,9 +75,9 @@ class MultiMealT1DData:
         # From the time retain only the hour since is the only thing actually needed during the simulation
         self.__time_setup(data, environment)
 
-        # Set glucose from given data
-        self.glucose = data.glucose.values.astype(float)
-        self.glucose_idxs = np.where(~np.isnan(self.glucose))[0]
+        # Set y (glucose) from given data
+        self.y = data.glucose.values.astype(float)
+        self.y_idxs = np.where(~np.isnan(self.y))[0]
 
         # Set insulin from given data
         self.__insulin_setup(data)

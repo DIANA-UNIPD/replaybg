@@ -13,4 +13,5 @@ dependencies = [
     "mkdocs",
     "mkdocs-material",
     "mkdocstrings[python]",
+    "tqdm",
 ]

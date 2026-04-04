@@ -71,8 +71,8 @@ class T1DData:
         self.__time_setup(data, environment)
 
         # Set glucose from given data
-        self.glucose = data.glucose.values.astype(float)
-        self.glucose_idxs = np.where(~np.isnan(self.glucose))[0]
+        self.y = data.glucose.values.astype(float)
+        self.y_idxs = np.where(~np.isnan(self.y))[0]
 
         # Set insulin from given data
         self.__insulin_setup(data)
