@@ -75,6 +75,8 @@ class Twinner():
                 - ``fun``: Final objective value.
                 - ``x``: Optimized parameter values in unconstrained space.
         """
+        global _worker_args
+        _worker_args = (self._neg_log_posterior, unknown_parameters_prior, model, data)
 
         # Build initial guesses for the parameters using their priors
         start_guesses = []
