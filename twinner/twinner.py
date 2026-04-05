@@ -1,9 +1,8 @@
+import os
 from typing import Any
 
 import numpy as np
 from scipy.optimize import minimize
-
-from distributions import to_unconstrained, to_constrained, log_jacobian_single
 
 import warnings
 
@@ -12,26 +11,42 @@ import multiprocessing
 from numba import float64, types
 from numba.typed import Dict
 
-warnings.catch_warnings()
-warnings.simplefilter("ignore")
+_worker_args = None
 
 class Twinner():
-    """Estimate model parameters by maximizing a posterior objective (MAP estimation).
+    """Estimate model parameters by maximizing a posterior objective.
 
     The twinning procedure searches for the most likely set of model
     parameters given observed data and prior distributions. Parameters are
-    optimized in an unconstrained space and mapped back to their constrained
-    values during evaluation.
+    optimized in an unconstrained space and mapped back to constrained values
+    during evaluation.
 
     Attributes:
-        None
+        parallelize: Whether to run optimizations in parallel.
+        n_jobs: Number of worker processes to use when parallelizing. Use ``-1``
+            to select all available CPU cores.
+        n_starts: Number of random initial guesses used to seed the optimizer.
     """
 
-    def __init__(self, parallelize: bool = True):
-        """Initialize a ``Twinner`` instance."""
+    def __init__(self,
+                 parallelize: bool = True,
+                 n_jobs: int = -1,
+                 n_starts: int = 64,
+    ):
+        """Initialize a `Twinner` instance.
+
+        Args:
+            parallelize: Whether to run the optimization in parallel.
+            n_jobs: Number of worker processes to use. If ``-1``, the number of
+                available CPU cores is used.
+            n_starts: Number of random starting points sampled from the priors.
+
+        Returns:
+            None
+        """
         self.parallelize = parallelize
-        self.n_jobs = -1
-        self.n_starts = 64
+        self.n_jobs = n_jobs
+        self.n_starts = n_starts
 
 
     def twin(self, model : Any, data, unknown_parameters_prior, environment) -> dict:
@@ -50,37 +65,48 @@ class Twinner():
             unknown_parameters_prior: Dictionary describing the parameters to fit.
                 Each entry should include:
                 - ``prior``: object with an ``evaluate(value)`` method
-                - ``min``: lower bound for the parameter
-                - ``max``: upper bound for the parameter
+                - ``min``: lower bound for the parameter.
+                - ``max``: upper bound for the parameter.
+            environment: Environment object containing runtime settings used by
+                the twinning pipeline.
 
         Returns:
-            ret: A dictionary containing the optimization result:
+            dict: Dictionary containing the optimization result with keys:
                 - ``fun``: Final objective value.
                 - ``x``: Optimized parameter values in unconstrained space.
         """
 
-        global _worker_args
-        _worker_args = (self._neg_log_posterior, unknown_parameters_prior, model, data)
-
-        n_jobs = multiprocessing.cpu_count() if self.n_jobs == -1 else self.n_jobs
+        # Build initial guesses for the parameters using their priors
+        start_guesses = []
+        for i in range(self.n_starts):
+            np.random.seed(i)
+            start_guess = np.array([v['prior'].sample(v['min'], v['max'])
+                                    for v in unknown_parameters_prior.values()])
+            start_guesses.append((i, start_guess))
 
         if self.parallelize:
-            ctx = multiprocessing.get_context('fork')
+            # Set the number of jobs
+            n_jobs = multiprocessing.cpu_count() if self.n_jobs == -1 else self.n_jobs
+            # Set the context
+            ctx = multiprocessing.get_context('fork' if os.name != 'nt' else 'spawn')
+            # Run the optimization in parallel
             with ctx.Pool(processes=n_jobs) as pool:
                 results = list(tqdm(
-                    pool.imap(_single_start, range(self.n_starts)),
+                    pool.imap(_run_optimization, start_guesses),
                     total=self.n_starts,
                     desc='Twinning'
                 ))
         else:
-            results = [_single_start(i) for i in tqdm(range(self.n_starts), desc='Twinning')]
+            # Run the optimization sequentially
+            results = [_run_optimization(a) for a in tqdm(start_guesses, desc='Twinning')]
 
+        # Get the best result
         best = min(results, key=lambda r: r.fun)
 
+        # Return the best result
         ret = dict()
         ret['fun'] = best.fun
         ret['x'] = best.x
-
         return ret
 
     def _log_prior(self, model, unknown_parameters_prior):
@@ -166,7 +192,7 @@ class Twinner():
                 the parameters.
 
         Returns:
-            float: Log posterior value, or ``-np.inf`` if the prior is invalid.
+            float: Log-posterior value, or ``-np.inf`` if the prior is invalid.
         """
 
         # Create the theta input dictionary (note: order is maintained by construction)
@@ -189,13 +215,14 @@ class Twinner():
         # Return log-posterior
         return lp + ll
 
+def _run_optimization(args):
+    # Unpack the arguments
+    i, start_guess = args
 
-_worker_args = None
-
-def _single_start(_):
+    # Get the worker arguments
     neg_log_posterior_fn, unknown_parameters_prior, model, data = _worker_args
-    start_guess = np.array([v['prior'].sample(v['min'], v['max'])
-                             for v in unknown_parameters_prior.values()])
+
+    # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return minimize(neg_log_posterior_fn, start_guess, method='Powell',

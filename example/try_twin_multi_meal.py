@@ -14,11 +14,14 @@ if __name__ == '__main__':
     save_folder = os.path.join(os.path.abspath(''))
     save_name = 'test'
 
+    df.loc[10, 'cho'] = 10
+    df.loc[10, 'cho_label'] = 'B'
     rbg = ReplayBG(save_folder=save_folder)
     theta_estimated = rbg.twin(data=df, bw=100, save_name=save_name)
     print(theta_estimated)
     out = rbg.replay(data=df,theta=theta_estimated, bw=100, save_name=save_name)
 
+    # TODO: add a plot utility
     import matplotlib.pyplot as plt
     plt.plot(df.glucose)
     plt.plot(out)
