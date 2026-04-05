@@ -177,7 +177,7 @@ class MultiMealT1DModel:
         self.Ip = self._Ip0
         self.IG = self._IG0
 
-    def step(self, u: float64[:], t: float64):
+    def step_fe(self, u: float64[:], t: float64):
         """
 
         :param u:
@@ -274,7 +274,7 @@ class MultiMealT1DModel:
         self.Isc2 = self.Isc2 + disc2
         self.Ip = self.Ip + dip
 
-    def step_be(self, u: float64[:], t: float64):
+    def step(self, u: float64[:], t: float64):
         """
 
         :param u:

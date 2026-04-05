@@ -33,24 +33,14 @@ class Twinner():
                  n_jobs: int = -1,
                  n_starts: int = 64,
     ):
-        """Initialize a `Twinner` instance.
-
-        Args:
-            parallelize: Whether to run the optimization in parallel.
-            n_jobs: Number of worker processes to use. If ``-1``, the number of
-                available CPU cores is used.
-            n_starts: Number of random starting points sampled from the priors.
-
-        Returns:
-            None
-        """
+        """Initialize a ``Twinner`` instance."""
         self.parallelize = parallelize
         self.n_jobs = n_jobs
         self.n_starts = n_starts
 
 
     def twin(self, model : Any, data, unknown_parameters_prior, environment) -> dict:
-        """Run twinning estimation for a model.
+        """Run twinning for a model.
 
         The method builds an initial guess from the current model parameters,
         transforms them to an unconstrained space, and then uses Powell
@@ -75,6 +65,8 @@ class Twinner():
                 - ``fun``: Final objective value.
                 - ``x``: Optimized parameter values in unconstrained space.
         """
+
+        # Set the worker arguments
         global _worker_args
         _worker_args = (self._neg_log_posterior, unknown_parameters_prior, model, data)
 
@@ -184,7 +176,7 @@ class Twinner():
 
         The input parameter vector is assumed to be in unconstrained space.
         Parameters are mapped back to constrained values before updating the
-        model. A Jacobian correction is included for the change of variables.
+        model.
 
         Args:
             theta: Parameter vector in unconstrained space.
