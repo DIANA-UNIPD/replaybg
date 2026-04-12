@@ -17,7 +17,8 @@ if __name__ == '__main__':
     df.loc[10, 'cho'] = 10
     df.loc[10, 'cho_label'] = 'B'
     rbg = ReplayBG(save_folder=save_folder)
-    theta_estimated = rbg.twin(data=df, bw=100, save_name=save_name)
+    theta_estimated = rbg.twin(data=df, bw=100, save_name=save_name,
+                               parallelize=True, n_jobs=-1, n_starts=4)
     print(theta_estimated)
     out = rbg.replay(data=df,theta=theta_estimated, bw=100, save_name=save_name)
 

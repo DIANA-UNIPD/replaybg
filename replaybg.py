@@ -7,7 +7,7 @@ from data.t1ddata import T1DData
 from data.multi_meal_t1d_data import MultiMealT1DData
 
 from environment import Environment
-from distributions import Normal, Gamma, LogNormal
+from distributions import Normal, Gamma, LogNormal, Uniform
 from model.multi_meal_t1d import MultiMealT1DModel
 from twinner.twinner import Twinner
 from utils.numba_dicts import to_typed_f32_dict
@@ -84,10 +84,10 @@ class ReplayBG:
     def twin(self, data: pd.DataFrame, bw: float, save_name: str,
              # twinning_method: str = 'mcmc', TODO: <-- this will become "custom_twinner : object = None" so user can pass their own Twinner
              # model: TODO: <-- this will become "model : object = None" so user can pass their own model
-
+             n_starts: int = 64,
              u2ss: float | None = None, x0: Dict | None = None,
              # previous_data_name: str | None = None, # TODO: decide whether we still need it
-             parallelize: bool = False, n_processes: int | None = None,
+             parallelize: bool = False, n_jobs: int | None = None,
              ) -> Dict:
         """
         Runs ReplayBG twinning procedure.
@@ -108,7 +108,7 @@ class ReplayBG:
 
         parallelize : boolean, optional, default : False
             A boolean that specifies whether to parallelize the twinning process.
-        n_processes : int, optional, default : None
+        n_jobs : int, optional, default : None
             The number of processes to be spawn if `parallelize` is `True`. If None, the number of CPU cores is used.
 
         Returns
@@ -137,16 +137,15 @@ class ReplayBG:
                            environment=self.environment)
 
         # Initialize model TODO: change this to the model provided in input
-        model = MultiMealT1DModel(u2ss=rbg_data.u2ss)
+        model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps)
 
         # Initialize the twinner
-        twinner = Twinner()
+        twinner = Twinner(parallelize=parallelize, n_jobs=n_jobs, n_starts=n_starts)
 
-        # TODO: "togliere un Log" qui e metterlo nel calcolo della logprior
         unknown_parameters_prior = {
             'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
             'SG': {'prior': LogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': .5},
-            'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': .5},
+            #'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': .5},
             #'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
             'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
             'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
@@ -157,7 +156,10 @@ class ReplayBG:
             'kabs_L': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
             'kabs_D': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
             'kabs_S': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-
+            'beta_B': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+            'beta_L': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+            'beta_D': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+            'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
 
         }
 
@@ -235,9 +237,10 @@ class ReplayBG:
         model = MultiMealT1DModel(u2ss=rbg_data.u2ss, theta0=theta_typed)  # TODO: can we set u2ss AFTER data?
 
         out = np.zeros(rbg_data.tsteps, )
-        for k in range(out.shape[0]):
+        out[0] = model.output(0)
+        for k in np.arange(1,out.shape[0]):
             model.step(rbg_data.u[k], k)
-            out[k] = model.output()
+            out[k] = model.output(k)
 
         out = out[0::rbg_data.yts]
 

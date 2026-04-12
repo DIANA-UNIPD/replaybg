@@ -1,80 +1,61 @@
 import numpy as np
 from numba import float64
-from scipy.stats import truncnorm
 
 from environment.config import jitclass_, njit_
-import math
 
 @jitclass_([
     ("mu", float64),
     ("sigma", float64),
 ])
 class LogNormal(object):
+    """Log-normal distribution helper.
+
+    The class provides density evaluation and bounded random sampling for a
+    log-normal distribution parameterized by the mean and standard deviation
+    of the underlying normal distribution.
+
+    Attributes:
+        mu: Mean of the underlying normal distribution.
+        sigma: Standard deviation of the underlying normal distribution.
+    """
 
     def __init__(self, mu, sigma):
+        """Initialize a `LogNormal` distribution.
+
+        Args:
+            mu: Mean of the underlying normal distribution.
+            sigma: Standard deviation of the underlying normal distribution.
+
+        Returns:
+            None
+        """
         self.mu = mu
         self.sigma = sigma
 
     def evaluate(self, x):
-        """
-        Computes the logarithm of the lognormal pdf evaluated at given x with given mu and sigma.
+        """Evaluate the log-normal probability density function.
 
-        Parameters
-        ----------
-        x: float
-            The value where to evaluate the lognormal pdf. Must be positive.
-        mu: float
-            The mean of the underlying normal distribution (i.e. of log(x)).
-        sigma: float
-            The standard deviation of the underlying normal distribution (i.e. of log(x)).
+        Args:
+            x: Value at which to evaluate the density. Must be positive.
 
-        Returns
-        -------
-        l_lognorm: float
-            The lognormal pdf evaluated at given x with given mu and sigma.
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
+        Returns:
+            float: Probability density value at ``x``.
         """
         return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((np.log(x) - self.mu) / self.sigma) ** 2)
 
-    def sample(self, min_val, max_val):
+    def sample(self, min_val, max_val, seed=None):
+        """Draw a bounded random sample from the distribution.
+
+        Args:
+            min_val: Minimum allowed sampled value.
+            max_val: Maximum allowed sampled value.
+            seed: Optional random seed.
+
+        Returns:
+            float: Sample from the distribution clipped to the given bounds.
         """
-        Draws a random sample from the lognormal distribution within [min_val, max_val].
-
-        Parameters
-        ----------
-        min_val: float
-            The minimum allowed sampled value.
-        max_val: float
-            The maximum allowed sampled value.
-
-        Returns
-        -------
-        sample: float
-            A random sample drawn from LogNormal(mu, sigma) clipped to [min_val, max_val].
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
-        """
+        if seed is not None:
+            np.random.seed(seed)
         return min(max(np.random.lognormal(self.mu, self.sigma), min_val), max_val)
 
 @jitclass_([
@@ -82,71 +63,53 @@ class LogNormal(object):
     ("sigma", float64),
 ])
 class Normal(object):
+    """Normal distribution helper.
+
+    The class provides density evaluation and bounded random sampling for a
+    Gaussian distribution parameterized by its mean and standard deviation.
+
+    Attributes:
+        mu: Mean of the normal distribution.
+        sigma: Standard deviation of the normal distribution.
+    """
 
     def __init__(self, mu, sigma):
+        """Initialize a `Normal` distribution.
+
+        Args:
+            mu: Mean of the normal distribution.
+            sigma: Standard deviation of the normal distribution.
+
+        Returns:
+            None
+        """
         self.mu = mu
         self.sigma = sigma
 
     def evaluate(self, x):
-        """
-        Computes the logarithm of the normal pdf evaluated at given x with given mu and sigma.
+        """Evaluate the normal probability density function.
 
-        Parameters
-        ----------
-        x: float
-            The value where to evaluate the normal pdf.
-        mu: float
-            The mean of the normal distribution.
-        sigma: float
-            The standard deviation of the normal distribution.
+        Args:
+            x: Value at which to evaluate the density.
 
-        Returns
-        -------
-        l_norm: float
-            The logarithm of the normal pdf evaluated at given x with given mu and sigma.
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
+        Returns:
+            float: Probability density value at ``x``.
         """
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
 
-    def sample(self, min_val, max_val):
+    def sample(self, min_val, max_val, seed=None):
+        """Draw a bounded random sample from the distribution.
+
+        Args:
+            min_val: Minimum allowed sampled value.
+            max_val: Maximum allowed sampled value.
+            seed: Optional random seed.
+
+        Returns:
+            float: Sample from the distribution clipped to the given bounds.
         """
-        Draws a random sample from the normal distribution within [min_val, max_val].
-
-        Parameters
-        ----------
-        min_val: float
-            The minimum allowed sampled value.
-        max_val: float
-            The maximum allowed sampled value.
-
-        Returns
-        -------
-        sample: float
-            A random sample drawn from Normal(mu, sigma) clipped to [min_val, max_val].
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
-        """
+        if seed is not None:
+            np.random.seed(seed)
         return min(max(np.random.normal(self.mu, self.sigma), min_val), max_val)
 
 @jitclass_([
@@ -155,80 +118,143 @@ class Normal(object):
     ("_log_normalizer", float64),
 ])
 class Gamma:
+    """Gamma distribution helper.
+
+    The class provides density evaluation and bounded random sampling for a
+    Gamma distribution parameterized in rate form.
+
+    Attributes:
+        alpha: Shape parameter.
+        beta: Rate parameter, where ``beta = 1 / scale``.
+        _log_normalizer: Cached log-normalization constant.
+    """
 
     def __init__(self, alpha, beta):
+        """Initialize a `Gamma` distribution.
+
+        Args:
+            alpha: Shape parameter.
+            beta: Rate parameter, where ``beta = 1 / scale``.
+
+        Returns:
+            None
+        """
         self.alpha = alpha
         self.beta = beta  # rate parameterization (beta = 1/scale)
         self._log_normalizer = alpha * np.log(beta) - _gammaln(alpha)
 
     def evaluate(self, x):
-        """
-        Gamma pdf evaluated at x.
+        """Evaluate the Gamma probability density function.
 
-        Parameters
-        ----------
-        x : float
-            Value at which to evaluate. Must be > 0.
+        Args:
+            x: Value at which to evaluate the density. Must be positive.
 
-        Returns
-        -------
-        float
-            Probability density. Returns 0.0 if x <= 0.
+        Returns:
+            float: Probability density value at ``x``. Returns ``0.0`` if
+            ``x <= 0``.
         """
         if x <= 0:
             return 0.0
         return np.exp(self._log_normalizer + (self.alpha - 1) * np.log(x) - self.beta * x)
 
-    def sample(self, min_val, max_val):
+    def sample(self, min_val, max_val, seed=None):
+        """Draw a bounded random sample from the distribution.
+
+        Args:
+            min_val: Minimum allowed sampled value.
+            max_val: Maximum allowed sampled value.
+            seed: Optional random seed.
+
+        Returns:
+            float: Sample from the distribution clipped to the given bounds.
         """
-        Draws a random sample from the gamma distribution within [min_val, max_val].
-
-        Parameters
-        ----------
-        min_val : float
-            The minimum allowed sampled value.
-        max_val : float
-            The maximum allowed sampled value.
-
-        Returns
-        -------
-        sample : float
-            A random sample drawn from Gamma(alpha, beta) clipped to [min_val, max_val].
-
-        Raises
-        ------
-        None
-
-        See Also
-        --------
-        None
-
-        Examples
-        --------
-        None
-        """
+        if seed is not None:
+            np.random.seed(seed)
         return min(max(np.random.gamma(self.alpha, 1.0 / self.beta), min_val), max_val)
+
+@jitclass_([
+    ("a", float64),
+    ("b", float64),
+])
+class Uniform(object):
+    """Uniform distribution helper.
+
+    The class provides density evaluation and bounded random sampling for a
+    uniform distribution over the interval ``[a, b]``.
+
+    Attributes:
+        a: Lower bound of the distribution support.
+        b: Upper bound of the distribution support.
+    """
+
+    def __init__(self, a, b):
+        """Initialize a `Uniform` distribution.
+
+        Args:
+            a: Lower bound of the distribution support.
+            b: Upper bound of the distribution support.
+
+        Returns:
+            None
+        """
+        self.a = a
+        self.b = b
+
+    def evaluate(self, x):
+        """Evaluate the uniform probability density function.
+
+        Args:
+            x: Value at which to evaluate the density.
+
+        Returns:
+            float: Probability density value at ``x``. Returns ``0.0`` if
+            ``x`` is outside ``[a, b]``.
+        """
+        if x < self.a or x > self.b:
+            return 0.0
+        return 1.0 / (self.b - self.a)
+
+    def sample(self, min_val, max_val, seed=None):
+        """Draw a bounded random sample from the distribution.
+
+        Args:
+            min_val: Minimum allowed sampled value.
+            max_val: Maximum allowed sampled value.
+            seed: Optional random seed.
+
+        Returns:
+            float: Sample from the distribution clipped to the given bounds.
+        """
+        if seed is not None:
+            np.random.seed(seed)
+        return min(max(np.random.uniform(self.a, self.b), min_val), max_val)
 
 @njit_
 def to_constrained(x, a=0, b=1):
-    """
-    Passes from search space to physiological space.
-    :param x:
-    :param a:
-    :param b:
-    :return:
+    """Map an unconstrained value to a bounded interval.
+
+    Args:
+        x: Value in unconstrained space.
+        a: Lower bound of the constrained interval.
+        b: Upper bound of the constrained interval.
+
+    Returns:
+        float: Value mapped into the interval ``[a, b]``.
     """
     return a + (b - a) / (1. + np.exp(-x))
 
 
 @njit_
 def to_unconstrained(x, a, b):
-    """
-    Passes from physiological space to search space.
-    :param x:
-    :param a:
-    :param b:
-    :return:
+    """Map a bounded value to unconstrained space.
+
+    Args:
+        x: Value in constrained space.
+        a: Lower bound of the constrained interval.
+        b: Upper bound of the constrained interval.
+
+    Returns:
+        float: Value mapped to unconstrained space.
     """
     t = (x - a) / (b - a)
     return np.log(t / (1 - t))
@@ -236,12 +262,29 @@ def to_unconstrained(x, a, b):
 
 @njit_
 def log_jacobian_single(x, a, b):
+    """Compute the log-Jacobian term for the bounded transform.
+
+    Args:
+        x: Value in unconstrained space.
+        a: Lower bound of the constrained interval.
+        b: Upper bound of the constrained interval.
+
+    Returns:
+        float: Log-Jacobian contribution.
+    """
     s = 1 / (1 + np.exp(-x))
     return np.log((b - a) * s * (1 - s))
 
 @njit_
 def _gammaln(x):
-    """Lanczos approximation of log-gamma, valid for x > 0."""
+    """Approximate the natural logarithm of the gamma function.
+
+    Args:
+        x: Positive input value.
+
+    Returns:
+        float: Approximation of ``log(Gamma(x))``.
+    """
     coeffs = np.array([
          76.18009172947146,
         -86.50532032941677,

@@ -73,8 +73,7 @@ class Twinner():
         # Build initial guesses for the parameters using their priors
         start_guesses = []
         for i in range(self.n_starts):
-            np.random.seed(i)
-            start_guess = np.array([v['prior'].sample(v['min'], v['max'])
+            start_guess = np.array([v['prior'].sample(v['min'], v['max'], i)
                                     for v in unknown_parameters_prior.values()])
             start_guesses.append((i, start_guess))
 
@@ -143,9 +142,9 @@ class Twinner():
         """
         # Simulate the model forward and get the output
         out = np.zeros(data.tsteps, )
-        for k in range(out.shape[0]):
+        for k in np.arange(1,out.shape[0]):
             model.step(data.u[k], k)
-            out[k] = model.output()
+            out[k] = model.output(k)
         # Subsample the output to match the sampling rate of the data
         out = out[0::data.yts]
 
@@ -192,7 +191,10 @@ class Twinner():
         # Create the theta input dictionary (note: order is maintained by construction)
         theta_dict = Dict.empty(key_type=types.unicode_type, value_type=float64)
         for i, k in enumerate(unknown_parameters_prior.keys()):
-                theta_dict[k] = theta[i]
+            val = theta[i]
+            if unknown_parameters_prior[k].get('integer', False):
+                val = float(round(val))
+            theta_dict[k] = val
 
         # Reset the model with the new parameters
         model.reset(theta_dict)
