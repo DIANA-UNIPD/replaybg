@@ -67,7 +67,7 @@ class MultiMealT1DData:
         else:
             self.data_to_input = data_to_input
 
-        self.u2ss = np.mean(data.basal.values)
+        self.u2ss = np.mean(data.basal.values) * 1000 / body_weight
         self.body_weight = body_weight
 
         self.yts = 5

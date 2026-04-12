@@ -30,12 +30,12 @@ class Twinner():
 
     def __init__(self,
                  parallelize: bool = True,
-                 n_jobs: int = -1,
+                 n_jobs: int | None = None,
                  n_starts: int = 64,
     ):
         """Initialize a ``Twinner`` instance."""
         self.parallelize = parallelize
-        self.n_jobs = n_jobs
+        self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
 
 

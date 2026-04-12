@@ -3,11 +3,9 @@ from typing import Callable, Dict
 import numpy as np
 import pandas as pd
 
-from data.t1ddata import T1DData
 from data.multi_meal_t1d_data import MultiMealT1DData
 
 from environment import Environment
-from distributions import Normal, Gamma, LogNormal, Uniform
 from model.multi_meal_t1d import MultiMealT1DModel
 from twinner.twinner import Twinner
 from utils.numba_dicts import to_typed_f32_dict
@@ -81,9 +79,10 @@ class ReplayBG:
                                        plot_mode=plot_mode,
                                        verbose=verbose)
 
-    def twin(self, data: pd.DataFrame, bw: float, save_name: str,
+    def twin(self, data, bw: float, save_name: str,
              # twinning_method: str = 'mcmc', TODO: <-- this will become "custom_twinner : object = None" so user can pass their own Twinner
-             # model: TODO: <-- this will become "model : object = None" so user can pass their own model
+             model: object = None,
+             unknown_parameters_prior: Dict = None,
              n_starts: int = 64,
              u2ss: float | None = None, x0: Dict | None = None,
              # previous_data_name: str | None = None, # TODO: decide whether we still need it
@@ -132,40 +131,12 @@ class ReplayBG:
         # if self.environment.verbose:
         #    print('Creating the digital twin using ' + twinning_method.upper())
 
-        # Unpack data to optimize performance during simulation
-        rbg_data = MultiMealT1DData(data=data,
-                           environment=self.environment)
-
-        # Initialize model TODO: change this to the model provided in input
-        model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps)
-
         # Initialize the twinner
         twinner = Twinner(parallelize=parallelize, n_jobs=n_jobs, n_starts=n_starts)
 
-        unknown_parameters_prior = {
-            'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
-            'SG': {'prior': LogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': .5},
-            #'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': .5},
-            #'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': 1},
-            'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
-            'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
-            'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
-            'SI_L': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
-            'SI_D': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
-            'kabs_B': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-            'kabs_L': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-            'kabs_D': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-            'kabs_S': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-            'beta_B': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-            'beta_L': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-            'beta_D': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-            'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-
-        }
-
         # Run the twinning procedure
         theta_estimated = twinner.twin(model=model,
-                                       data=rbg_data,
+                                       data=data,
                                        unknown_parameters_prior=unknown_parameters_prior,
                                        environment=self.environment)
 

@@ -6,7 +6,7 @@ import pandas as pd
 from environment import Environment
 
 
-class T1DData:
+class SingleMealT1DData:
     """Prepare and store time-series data for the ReplayBG simulation pipeline.
 
     The class converts a pandas dataframe into the arrays and metadata needed by
@@ -62,7 +62,7 @@ class T1DData:
         else:
             self.data_to_input = data_to_input
 
-        self.u2ss = np.mean(data.basal.values)
+        self.u2ss = np.mean(data.basal.values) * 1000 / body_weight
         self.body_weight = body_weight
 
         self.yts = 5
@@ -70,7 +70,7 @@ class T1DData:
         # From the time retain only the hour since is the only thing actually needed during the simulation
         self.__time_setup(data, environment)
 
-        # Set glucose from given data
+        # Set y (glucose) from given data
         self.y = data.glucose.values.astype(float)
         self.y_idxs = np.where(~np.isnan(self.y))[0]
 
@@ -166,17 +166,7 @@ class T1DData:
         # Initialize the meal type vector
         self.meal_type = np.empty([self.tsteps, ], dtype=str)
 
-        self.meal_B = np.zeros([self.tsteps, ])
-        self.meal_L = np.zeros([self.tsteps, ])
-        self.meal_D = np.zeros([self.tsteps, ])
-        self.meal_S = np.zeros([self.tsteps, ])
-        self.meal_H = np.zeros([self.tsteps, ])
-
-        self.meal_B2 = np.zeros([self.tsteps, ])
-        self.meal_L2 = np.zeros([self.tsteps, ])
-        self.meal_S2 = np.zeros([self.tsteps, ])
-
-        self.meal_data = []
+        self.meal = np.zeros([self.tsteps, ])
 
         self.meal_data = data.cho.values
 
@@ -189,35 +179,7 @@ class T1DData:
                 i]] * (1000 / self.body_weight)  # mg/(kg*min)
             self.meal_announcement[(m_idx[i] * self.yts)] = data['cho'][m_idx[i]] * self.yts  # mg/(kg*min)
 
-            self.meal_type[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = data['cho_label'][m_idx[i]]
-
-            if data['cho_label'][m_idx[i]] == 'B':
-                self.meal_B[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'L':
-                self.meal_L[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'D':
-                self.meal_D[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'S':
-                self.meal_S[(m_idx[i] * self.yts):(
-                        (m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'H':
-                self.meal_H[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-
-            if data['cho_label'][m_idx[i]] == 'B2':
-                self.meal_B2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'L2':
-                self.meal_L2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
-            if data['cho_label'][m_idx[i]] == 'S2':
-                self.meal_S2[(m_idx[i] * self.yts):(
-                        (m_idx[i] + 1) * self.yts)] = self.meal[
-                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            self.meal_type[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = '-'
 
     def __setup_u(self):
         """Build the combined model input matrix from configured inputs.

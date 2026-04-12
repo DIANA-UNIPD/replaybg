@@ -314,6 +314,8 @@ class MultiMealT1DModel:
 
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
+        self.u[5, 0] = self.u2ss
+        self.u[6, 0] = 0.0  # no bolus at t=0
 
     def step(self, u: float64[:], t: float64):
         """Advance the model by one minute using Backward Euler integration.
@@ -349,7 +351,7 @@ class MultiMealT1DModel:
         # Apply meal announcement delay beta_B: use the carb input from beta_B
         # minutes ago. If we are still within the first beta_B minutes of the
         # simulation (t < beta_B), treat the delayed input as zero.
-        u_m_b = self.u[0, t - self.beta_B] if (t - self.beta_B) >= 0 else 0 #TODO: understand why it goes negative
+        u_m_b = self.u[0, t - self.beta_B] if (t - self.beta_B) >= 0 else 0
         self.u[1, t] = u[1]
         u_m_l = self.u[1, t - self.beta_L] if (t - self.beta_L) >= 0 else 0
         self.u[2, t] = u[2]
