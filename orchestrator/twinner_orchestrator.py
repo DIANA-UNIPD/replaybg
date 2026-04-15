@@ -295,5 +295,5 @@ class TwinnerOrchestrator:
             tsteps=rbg_data.tsteps,
         )
         for t in range(1, rbg_data.tsteps):
-            model.step(rbg_data.u[t], float(t))
+            model.step(rbg_data.u[t], t)
         return model

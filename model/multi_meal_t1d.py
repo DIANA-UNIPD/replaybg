@@ -1,5 +1,5 @@
 import numpy as np
-from numba import float64, int16
+from numba import float64, int16, int64
 from numba.typed import Dict
 from numba import types
 
@@ -335,7 +335,7 @@ class MultiMealT1DModel:
         self.u[5, 0] = self.u2ss
         self.u[6, 0] = 0.0  # no bolus at t=0
 
-    def step(self, u: float64[:], t: float64):
+    def step(self, u: float64[:], t: int64):
         """Advance the model by one minute using Backward Euler integration.
 
         This is the primary integration method used during twinning and replay.

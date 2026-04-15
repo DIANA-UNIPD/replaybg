@@ -153,7 +153,7 @@ class ReplayBG:
     def replay(self, data: pd.DataFrame, theta, bw: float, save_name: str,
                # twinning_method: str = 'mcmc', TODO: <-- this will become "custom_twinner : object = None" so user can pass their own Twinner
                # model: TODO: <-- this will become "model : object = None" so user can pass their own model
-               u2ss: float | None = None, x0: Dict | None = None,
+               u2ss: float | None = None, x0_setup: Optional[Callable] = None,
                # previous_data_name: str | None = None, # TODO: decide whether we still need it
                parallelize: bool = False, n_processes: int | None = None,
                ) -> Dict:
@@ -209,6 +209,9 @@ class ReplayBG:
 
         # Initialize model TODO: change this to the model provided in input
         model = MultiMealT1DModel(u2ss=rbg_data.u2ss, theta0=theta_typed)  # TODO: can we set u2ss AFTER data?
+
+        if x0_setup is not None:
+            x0_setup(model, rbg_data)
 
         out = np.zeros(rbg_data.tsteps, )
         out[0] = model.output(0)
