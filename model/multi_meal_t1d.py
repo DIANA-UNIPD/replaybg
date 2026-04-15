@@ -582,3 +582,50 @@ def _setup_x0(x0, previous_theta=None):
 
 
 MultiMealT1DModel.setup_x0 = staticmethod(_setup_x0)
+
+
+def _extract_final_x0(model):
+    """Return the final state of *model* as a typed dict suitable for ``setup_x0``.
+
+    Reads the last time-step of every state array and packs the values into a
+    plain Python dict, then converts it to a Numba-typed dict via
+    ``to_typed_f32_dict``.  The returned dict can be passed directly as the
+    ``x0`` argument of ``MultiMealT1DModel.setup_x0``.
+
+    Args:
+        model: A ``MultiMealT1DModel`` instance whose ``step()`` loop has
+            already been run to completion.
+
+    Returns:
+        Numba typed dict[str, float64] with keys matching the ``x0`` contract
+        expected by ``_setup_x0``.
+    """
+    from utils.numba_dicts import to_typed_f32_dict
+
+    state = {
+        "G0":        float(model.G[-1]),
+        "X0":        float(model.X[-1]),
+        "IG0":       float(model.IG[-1]),
+        "Isc10":     float(model.Isc1[-1]),
+        "Isc20":     float(model.Isc2[-1]),
+        "Ip0":       float(model.Ip[-1]),
+        "Qsto1_B_0": float(model.Qsto1_B[-1]),
+        "Qsto2_B_0": float(model.Qsto2_B[-1]),
+        "Qgut_B_0":  float(model.Qgut_B[-1]),
+        "Qsto1_L_0": float(model.Qsto1_L[-1]),
+        "Qsto2_L_0": float(model.Qsto2_L[-1]),
+        "Qgut_L_0":  float(model.Qgut_L[-1]),
+        "Qsto1_D_0": float(model.Qsto1_D[-1]),
+        "Qsto2_D_0": float(model.Qsto2_D[-1]),
+        "Qgut_D_0":  float(model.Qgut_D[-1]),
+        "Qsto1_S_0": float(model.Qsto1_S[-1]),
+        "Qsto2_S_0": float(model.Qsto2_S[-1]),
+        "Qgut_S_0":  float(model.Qgut_S[-1]),
+        "Qsto1_H_0": float(model.Qsto1_H[-1]),
+        "Qsto2_H_0": float(model.Qsto2_H[-1]),
+        "Qgut_H_0":  float(model.Qgut_H[-1]),
+    }
+    return to_typed_f32_dict(state)
+
+
+MultiMealT1DModel.extract_final_x0 = staticmethod(_extract_final_x0)
