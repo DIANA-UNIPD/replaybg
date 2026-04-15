@@ -48,7 +48,7 @@ if __name__ == '__main__':
         rbg=rbg,
         unknown_parameters_prior=unknown_parameters_prior,
         save_name_prefix='twin',
-        n_starts=32,
+        n_starts=4,
         parallelize=True,
         n_jobs=-1,
     )
@@ -84,7 +84,7 @@ if __name__ == '__main__':
         theta_typed = to_typed_f32_dict(r['theta'])
         final_model = MultiMealT1DModel(u2ss=rbg_data.u2ss, theta0=theta_typed, tsteps=rbg_data.tsteps)
         for t in range(1, rbg_data.tsteps):
-            final_model.step(rbg_data.u[t], float(t))
+            final_model.step(rbg_data.u[t], t)
         prev_x0 = MultiMealT1DModel.extract_final_x0(final_model)
         prev_theta = r['theta']
 
