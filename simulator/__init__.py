@@ -1,2 +1,12 @@
-# TODO: create a simulator-like environment that just uses a model, a twin, a set of callbacks (i.e., the handler), and
-#       a set of sensors to run a simulation
+"""Simulator package for multi-segment ReplayBG replay.
+
+Public API
+----------
+SimulatorOrchestrator
+    Takes the output of TwinnerOrchestrator.twin() and replays each segment
+    with proper physiological carry-over state between segments.
+"""
+
+from simulator.simulator_orchestrator import SimulatorOrchestrator
+
+__all__ = ["SimulatorOrchestrator"]
