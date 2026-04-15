@@ -147,11 +147,7 @@ class ReplayBG:
                                        unknown_parameters_prior=unknown_parameters_prior,
                                        environment=self.environment)
 
-        theta_phi = {}
-        for i, k in enumerate(unknown_parameters_prior.keys()):
-            theta_phi[k] = theta_estimated['x'][i]
-
-        return dict(zip(unknown_parameters_prior.keys(), theta_phi.values()))
+        return dict(zip(unknown_parameters_prior.keys(), theta_estimated['x']))
 
 
     def replay(self, data: pd.DataFrame, theta, bw: float, save_name: str,
