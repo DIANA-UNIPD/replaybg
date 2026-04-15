@@ -167,7 +167,7 @@ class MultiMealT1DModel:
         self.u2ss = np.float64(u2ss)
         self.x0 = x0 # TODO: check if this is the right way to do it
         self.tsteps = tsteps
-        self.n_u = 8
+        self.n_u = 10
         self.reset(theta0)
 
 
@@ -340,6 +340,8 @@ class MultiMealT1DModel:
                 - u[5]: Basal insulin infusion rate (pmol/kg/min).
                 - u[6]: Bolus insulin rate (pmol/kg/min).
                 - u[7]: Hour of day (0–23), used to select insulin sensitivity.
+                - u[8]: Glucose infusion rate (mg/kg/min) — forcing input added directly to the plasma glucose compartment.
+                - u[9]: Extra plasma insulin (pmol/kg) — forcing input added inside the ``(Ip[t] - Ipb)`` drive of the remote insulin compartment X.
             t: Current simulation time step (integer minute index, >= 1).
 
         Returns:
@@ -369,6 +371,10 @@ class MultiMealT1DModel:
         u_i = self.u[5, t - self.tau] + self.u[6, t - self.tau] if (t - self.tau) >= 0 else self.u2ss
         self.u[7, t] = u[7]
         u_h = self.u[7, t]
+        self.u[8, t] = u[8]
+        forcing_ra = self.u[8, t]
+        self.u[9, t] = u[9]
+        forcing_ip = self.u[9, t]
 
         # Select insulin sensitivity based on hour of day:
         # breakfast window 04:00–10:59, lunch 11:00–16:59, dinner/night otherwise
@@ -434,12 +440,12 @@ class MultiMealT1DModel:
 
         # --- Insulin action and glucose (Backward Euler) ---
         # X depends on Ip[t] (just computed above)
-        self.X[t] = (self.X[t-1] + self.p2 * (SI / self.VI) * (self.Ip[t] - self.Ipb)) / (1 + self.p2)
+        self.X[t] = (self.X[t-1] + self.p2 * (SI / self.VI) * (self.Ip[t] - self.Ipb + forcing_ip)) / (1 + self.p2)
         # G depends on X[t] and all Qgut[t] (just computed). The risk coefficient
         # is frozen at G[t-1] (semi-implicit) to keep the update linear in G[t].
         self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * (
                 self.kabs_B * self.Qgut_B[t] + self.kabs_L * self.Qgut_L[t] + self.kabs_D * self.Qgut_D[t] +
-                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t]) / self.VG) / (1 + self.SG + risk * self.X[t])
+                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t]) / self.VG + forcing_ra / self.VG) / (1 + self.SG + risk * self.X[t])
         # Interstitial glucose: first-order low-pass filter on plasma glucose
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 

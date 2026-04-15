@@ -63,7 +63,9 @@ class MultiMealT1DData:
                                   4: 'meal_H',
                                   5: 'bolus',
                                   6: 'basal',
-                                  7: 't_hour'}
+                                  7: 't_hour',
+                                  8: 'forcing_ra',
+                                  9: 'forcing_ip'}
         else:
             self.data_to_input = data_to_input
 
@@ -82,6 +84,7 @@ class MultiMealT1DData:
         # Set insulin from given data
         self.__insulin_setup(data)
         self.__meal_setup(data)
+        self.__forcing_input_setup()
         self.__setup_u()
 
     def __time_setup(self,
@@ -223,6 +226,18 @@ class MultiMealT1DData:
                 self.meal_S2[(m_idx[i] * self.yts):(
                         (m_idx[i] + 1) * self.yts)] = self.meal[
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+
+    def __forcing_input_setup(self):
+        """Initialise forcing input arrays to zero.
+
+        These arrays can be overwritten after construction to inject external
+        forcing signals (e.g. IV glucose or IV insulin) into the simulation.
+
+        Returns:
+            None
+        """
+        self.forcing_ra = np.zeros(self.tsteps)
+        self.forcing_ip = np.zeros(self.tsteps)
 
     def __setup_u(self):
         """Build the combined model input matrix from configured inputs.
