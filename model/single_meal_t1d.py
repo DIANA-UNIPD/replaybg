@@ -417,3 +417,38 @@ def _setup_x0(x0, previous_theta=None):
     return setup
 
 SingleMealT1DModel.setup_x0 = staticmethod(_setup_x0)
+
+
+def _extract_final_x0(model):
+    """Return the final state of *model* as a typed dict suitable for ``setup_x0``.
+
+    Reads the last time-step of every state array and packs the values into a
+    plain Python dict, then converts it to a Numba-typed dict via
+    ``to_typed_f32_dict``.  The returned dict can be passed directly as the
+    ``x0`` argument of ``SingleMealT1DModel.setup_x0``.
+
+    Args:
+        model: A ``SingleMealT1DModel`` instance whose ``step()`` loop has
+            already been run to completion.
+
+    Returns:
+        Numba typed dict[str, float64] with keys matching the ``x0`` contract
+        expected by ``_setup_x0``.
+    """
+    from utils.numba_dicts import to_typed_f32_dict
+
+    state = {
+        "G0":      float(model.G[-1]),
+        "X0":      float(model.X[-1]),
+        "IG0":     float(model.IG[-1]),
+        "Isc10":   float(model.Isc1[-1]),
+        "Isc20":   float(model.Isc2[-1]),
+        "Ip0":     float(model.Ip[-1]),
+        "Qsto1_0": float(model.Qsto1[-1]),
+        "Qsto2_0": float(model.Qsto2[-1]),
+        "Qgut_0":  float(model.Qgut[-1]),
+    }
+    return to_typed_f32_dict(state)
+
+
+SingleMealT1DModel.extract_final_x0 = staticmethod(_extract_final_x0)
