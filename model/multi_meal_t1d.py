@@ -8,6 +8,8 @@ from environment.config import jitclass_
 theta0_type = types.DictType(types.unicode_type, float64)
 x0_type = types.DictType(types.unicode_type, float64)
 JITCLASS_SPEC = [
+    ("_kd_prev", float64),
+    ("_ka2_prev", float64),
     ("_G0", float64),
     ("_X0", float64),
     ("_Qsto1_B_0", float64),
@@ -165,7 +167,9 @@ class MultiMealT1DModel:
             None
         """
         self.u2ss = np.float64(u2ss)
-        self.x0 = x0 # TODO: check if this is the right way to do it
+        self._kd_prev  = np.float64(0.026)
+        self._ka2_prev = np.float64(0.014)
+        self.x0 = x0
         self.tsteps = tsteps
         self.n_u = 10
         self.reset(theta0)
@@ -252,13 +256,27 @@ class MultiMealT1DModel:
         self._Qsto2_H_0 = self.x0["Qsto2_H_0"] if "Qsto2_H_0" in self.x0 else np.float64(0)
         self._Qgut_H_0 = self.x0["Qgut_H_0"] if "Qgut_H_0" in self.x0 else np.float64(0)
 
-        # Insulin compartments start at the basal steady state derived from u2ss
+        # Insulin compartments start at the basal steady state derived from u2ss.
+        # When x0 carries values from the previous day, they are scaled by the ratio of
+        # the current trial's ki1/ki2 to the previous day's ki1_prev/ki2_prev, mirroring
+        # the py_replay_bg approach. When _kd_prev == kd (cold start default) the ratio
+        # is 1 and behaviour is unchanged.
         ki1 = self.u2ss / self.kd
         ki2 = self.kd / self.ka2 * ki1
         self.Ipb = self.ka2 / self.ke * ki2  # basal plasma insulin
 
-        self._Isc10 = self.x0["Isc10"] if "Isc10" in self.x0 else np.float64(ki1)
-        self._Isc20 = self.x0["Isc20"] if "Isc20" in self.x0 else np.float64(ki2)
+        ki1_prev = self.u2ss / self._kd_prev
+        ki2_prev = self._kd_prev / self._ka2_prev * ki1_prev
+
+        if "Isc10" in self.x0:
+            self._Isc10 = ki1 / ki1_prev * self.x0["Isc10"]
+        else:
+            self._Isc10 = ki1
+        if "Isc20" in self.x0:
+            self._Isc20 = ki2 / ki2_prev * self.x0["Isc20"]
+        else:
+            self._Isc20 = ki2
+        # Ipb = u2ss/ke regardless of kd/ka2 — no scaling needed
         self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float64(self.Ipb)
         self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else self.Gb
 
@@ -462,3 +480,105 @@ class MultiMealT1DModel:
             float: Interstitial glucose concentration at time ``t`` (mg/dL).
         """
         return self.IG[t]
+
+
+def _setup_x0(x0, previous_theta=None):
+    """Factory returning a ``(model, data) -> None`` callable for ``ReplayBG.twin(x0_setup=...)``.
+
+    Computes the carry-over glucose appearance rate (``previous_Ra``) from the
+    meal gut-compartment values stored in *x0*, injects it into
+    ``data.forcing_ra`` / ``data.u[:, 8]``, resets the meal compartments in *x0*
+    to zero, and stores the previous-day insulin kinetic parameters on the model
+    so that :meth:`MultiMealT1DModel.reset` can correctly scale the ``Isc1``/
+    ``Isc2`` initial conditions on every optimizer trial.
+
+    This function is defined outside the ``@jitclass_``-decorated class body so
+    that Numba never tries to compile it (it must accept a plain Python
+    ``MultiMealT1DData`` object).  All spec'd model attributes and methods are
+    accessible from Python on a compiled jitclass instance.
+
+    Args:
+        x0: Numba typed dict of initial conditions taken from the end of the
+            previous simulation (keys match ``MultiMealT1DModel`` attribute
+            names, e.g. ``"G0"``, ``"Isc10"``, ``"Qsto1_B_0"``).
+        previous_theta: Plain Python dict of the previous day's estimated
+            parameters.  Keys used: ``'kempt'``, ``'kabs_B'``, ``'kabs_L'``,
+            ``'kabs_D'``, ``'kabs_S'``, ``'kabs_H'``, ``'f'``, ``'kd'``,
+            ``'ka2'``.  Missing keys fall back to population defaults.
+
+    Returns:
+        Callable[(model, data) -> None]: ready to pass as the ``x0_setup``
+        argument of :meth:`ReplayBG.twin`.
+
+    Example:
+        >>> setup = MultiMealT1DModel.setup_x0(x0=day1_x0, previous_theta=theta_day1)
+        >>> theta_day2 = rbg.twin(data=rbg_data2, model=model2, ..., x0_setup=setup)
+    """
+    def setup(model, data):
+        pt = previous_theta or {}
+
+        kempt  = pt.get('kempt',  0.18)
+        kabs_B = pt.get('kabs_B', 0.012)
+        kabs_L = pt.get('kabs_L', 0.012)
+        kabs_D = pt.get('kabs_D', 0.012)
+        kabs_S = pt.get('kabs_S', 0.012)
+        kabs_H = pt.get('kabs_H', 0.012)
+        f      = pt.get('f',      0.9)
+
+        # Free Backward-Euler evolution of meal gut compartments (no new meal input).
+        # Layout: [Qsto1_B, Qsto2_B, Qgut_B, Qsto1_L, ..., Qgut_H]
+        xk = [
+            float(x0.get("Qsto1_B_0", 0.0)), float(x0.get("Qsto2_B_0", 0.0)), float(x0.get("Qgut_B_0", 0.0)),
+            float(x0.get("Qsto1_L_0", 0.0)), float(x0.get("Qsto2_L_0", 0.0)), float(x0.get("Qgut_L_0", 0.0)),
+            float(x0.get("Qsto1_D_0", 0.0)), float(x0.get("Qsto2_D_0", 0.0)), float(x0.get("Qgut_D_0", 0.0)),
+            float(x0.get("Qsto1_S_0", 0.0)), float(x0.get("Qsto2_S_0", 0.0)), float(x0.get("Qgut_S_0", 0.0)),
+            float(x0.get("Qsto1_H_0", 0.0)), float(x0.get("Qsto2_H_0", 0.0)), float(x0.get("Qgut_H_0", 0.0)),
+        ]
+        previous_Ra = np.zeros(data.tsteps)
+        for k in range(data.tsteps):
+            xk[0]  = xk[0]  / (1 + kempt)
+            xk[1]  = (xk[1]  + kempt * xk[0])  / (1 + kempt)
+            xk[2]  = (xk[2]  + kempt * xk[1])  / (1 + kabs_B)
+            xk[3]  = xk[3]  / (1 + kempt)
+            xk[4]  = (xk[4]  + kempt * xk[3])  / (1 + kempt)
+            xk[5]  = (xk[5]  + kempt * xk[4])  / (1 + kabs_L)
+            xk[6]  = xk[6]  / (1 + kempt)
+            xk[7]  = (xk[7]  + kempt * xk[6])  / (1 + kempt)
+            xk[8]  = (xk[8]  + kempt * xk[7])  / (1 + kabs_D)
+            xk[9]  = xk[9]  / (1 + kempt)
+            xk[10] = (xk[10] + kempt * xk[9])  / (1 + kempt)
+            xk[11] = (xk[11] + kempt * xk[10]) / (1 + kabs_S)
+            xk[12] = xk[12] / (1 + kempt)
+            xk[13] = (xk[13] + kempt * xk[12]) / (1 + kempt)
+            xk[14] = (xk[14] + kempt * xk[13]) / (1 + kabs_H)
+            previous_Ra[k] = f * (
+                kabs_B * xk[2]  + kabs_L * xk[5]  + kabs_D * xk[8] +
+                kabs_S * xk[11] + kabs_H * xk[14]
+            )
+
+        # Inject carry-over Ra into data (data.u channel 8 maps to forcing_ra).
+        data.forcing_ra = previous_Ra
+        data.u[:, 8]    = previous_Ra
+
+        # Reset meal compartments in x0 — carry-over is now handled via forcing_ra.
+        for key in [
+            "Qsto1_B_0", "Qsto2_B_0", "Qgut_B_0",
+            "Qsto1_L_0", "Qsto2_L_0", "Qgut_L_0",
+            "Qsto1_D_0", "Qsto2_D_0", "Qgut_D_0",
+            "Qsto1_S_0", "Qsto2_S_0", "Qgut_S_0",
+            "Qsto1_H_0", "Qsto2_H_0", "Qgut_H_0",
+        ]:
+            x0[key] = np.float64(0.0)
+
+        # Store previous-day insulin params so reset() can scale Isc1/Isc2.
+        model._kd_prev  = np.float64(pt.get('kd',  0.026))
+        model._ka2_prev = np.float64(pt.get('ka2', 0.014))
+
+        # Apply updated x0 and re-initialise state arrays.
+        model.x0 = x0
+        model.reset(Dict.empty(key_type=types.unicode_type, value_type=float64))
+
+    return setup
+
+
+MultiMealT1DModel.setup_x0 = staticmethod(_setup_x0)

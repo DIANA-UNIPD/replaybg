@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -84,7 +84,8 @@ class ReplayBG:
              model: object = None,
              unknown_parameters_prior: Dict = None,
              n_starts: int = 64,
-             u2ss: float | None = None, x0: Dict | None = None,
+             u2ss: float | None = None,
+             x0_setup: Optional[Callable] = None,
              # previous_data_name: str | None = None, # TODO: decide whether we still need it
              parallelize: bool = False, n_jobs: int | None = None,
              ) -> Dict:
@@ -102,8 +103,11 @@ class ReplayBG:
 
         u2ss : float, optional, default : None
             The steady state of the basal insulin infusion.
-        x0 : list, optional, default : None
-            The initial model conditions.
+        x0_setup : callable, optional, default : None
+            A ``(model, data) -> None`` callable that sets up initial model conditions
+            and updates the data forcing inputs before twinning begins.  Typically
+            created by ``MultiMealT1DModel.setup_x0(x0, previous_theta)`` when twinning
+            consecutive days of data.  If ``None``, the model is used as-is (cold start).
 
         parallelize : boolean, optional, default : False
             A boolean that specifies whether to parallelize the twinning process.
@@ -130,6 +134,9 @@ class ReplayBG:
 
         # if self.environment.verbose:
         #    print('Creating the digital twin using ' + twinning_method.upper())
+
+        if x0_setup is not None:
+            x0_setup(model, data)
 
         # Initialize the twinner
         twinner = Twinner(parallelize=parallelize, n_jobs=n_jobs, n_starts=n_starts)
