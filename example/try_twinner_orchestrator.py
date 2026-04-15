@@ -10,7 +10,7 @@ from distributions import Normal, Gamma, LogNormal, Uniform
 
 from replaybg import ReplayBG
 from orchestrator.twinner_orchestrator import TwinnerOrchestrator
-from utils.numba_dicts import to_typed_f32_dict
+from simulator.simulator_orchestrator import SimulatorOrchestrator
 
 if __name__ == '__main__':
     freeze_support()
@@ -60,36 +60,27 @@ if __name__ == '__main__':
         print(f"  Parameters estimated: {list(r['prior_used'].keys())}")
         print(f"  theta: {r['theta']}")
 
+    sim = SimulatorOrchestrator(
+        model_class=MultiMealT1DModel,
+        data_class=MultiMealT1DData,
+        data=df,
+        bw=100,
+        rbg=rbg,
+        twin_results=results,
+        save_name_prefix='replay',
+    )
+
+    sim_results = sim.replay()
+
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(12, 4))
 
     ax.plot(df['t'], df['glucose'], color='tab:gray', linewidth=1.5, label='CGM')
 
-    prev_x0 = None
-    prev_theta = None
-    for r in results:
-        seg_df = df[(df['t'] >= r['segment_start']) & (df['t'] <= r['segment_end'])].copy()
-
-        x0_setup = None
-        if prev_x0 is not None:
-            x0_setup = MultiMealT1DModel.setup_x0(x0=prev_x0, previous_theta=prev_theta)
-
-        out = rbg.replay(data=seg_df, theta=r['theta'], bw=100,
-                         save_name=f"replay_{r['segment_index']:04d}",
-                         x0_setup=x0_setup)
-
-        # Extract final state for carry-over into the next segment's replay
-        rbg_data = MultiMealT1DData(data=seg_df, environment=rbg.environment)
-        theta_typed = to_typed_f32_dict(r['theta'])
-        final_model = MultiMealT1DModel(u2ss=rbg_data.u2ss, theta0=theta_typed, tsteps=rbg_data.tsteps)
-        for t in range(1, rbg_data.tsteps):
-            final_model.step(rbg_data.u[t], t)
-        prev_x0 = MultiMealT1DModel.extract_final_x0(final_model)
-        prev_theta = r['theta']
-
-        label = f"Segment {r['segment_index']}"
-        ax.plot(seg_df['t'], out, linewidth=1.5, label=label)
+    for r in sim_results:
+        seg_df = df[(df['t'] >= r['segment_start']) & (df['t'] <= r['segment_end'])]
+        ax.plot(seg_df['t'], r['glucose'], linewidth=1.5, label=f"Segment {r['segment_index']}")
 
     ax.set_xlabel('Time')
     ax.set_ylabel('Glucose (mg/dL)')
