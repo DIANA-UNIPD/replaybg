@@ -33,7 +33,7 @@ from typing import Callable
 import pandas as pd
 
 from orchestrator.quality import default_quality_fn
-from orchestrator.segmentation import segment_by_first_event
+from orchestrator.segmentation import segment_4_to_4
 from utils.numba_dicts import to_typed_f32_dict
 
 
@@ -62,7 +62,7 @@ class TwinnerOrchestrator:
             filters this dict for each segment based on the data available.
         segment_fn: Callable ``(data) -> list[pd.DataFrame]`` that cuts
             *data* into an ordered list of segment DataFrames.  Defaults to
-            :func:`~orchestrator.segmentation.segment_by_first_event`.
+            :func:`~orchestrator.segmentation.segment_4_to_4`.
         quality_fn: Callable ``(segment) -> bool`` that returns ``True`` when
             a segment is acceptable for twinning.  Defaults to
             :func:`~orchestrator.quality.default_quality_fn`.
@@ -102,7 +102,7 @@ class TwinnerOrchestrator:
         bw: float,
         rbg,
         unknown_parameters_prior: dict,
-        segment_fn: Callable[[pd.DataFrame], list[pd.DataFrame]] = segment_by_first_event,
+        segment_fn: Callable[[pd.DataFrame], list[pd.DataFrame]] = segment_4_to_4,
         quality_fn: Callable[[pd.DataFrame], bool] = default_quality_fn,
         save_name_prefix: str = "twin",
         n_starts: int = 64,
