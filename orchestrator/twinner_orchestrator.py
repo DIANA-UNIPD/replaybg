@@ -31,6 +31,7 @@ from __future__ import annotations
 from typing import Callable
 
 import pandas as pd
+import numpy as np
 
 from orchestrator.quality import default_quality_fn
 from orchestrator.segmentation import segment_4_to_4
@@ -150,6 +151,7 @@ class TwinnerOrchestrator:
         prev_theta: dict | None = None
 
         for i, seg_df in enumerate(segments):
+
             # --- Quality check ---
             if not self.quality_fn(seg_df):
                 # Reset carry-over so the next accepted segment starts cold.
@@ -190,7 +192,7 @@ class TwinnerOrchestrator:
             )
 
             # --- Extract final state for carry-over into next segment ---
-            final_model = self._run_forward(rbg_data, theta)
+            final_model = self._run_forward(rbg_data, theta, prev_x0=prev_x0, prev_theta=prev_theta)
             prev_x0 = self.model_class.extract_final_x0(final_model)
             prev_theta = theta
 
@@ -272,7 +274,7 @@ class TwinnerOrchestrator:
             return True  # Unknown period — include by default.
         return seg_df.loc[mask, "glucose"].notna().any()
 
-    def _run_forward(self, rbg_data, theta: dict):
+    def _run_forward(self, rbg_data, theta: dict, prev_x0=None, prev_theta: dict | None = None):
         """Run a forward simulation with *theta* and return the final model.
 
         The model is initialised with *theta* and stepped through all
@@ -280,10 +282,28 @@ class TwinnerOrchestrator:
         arrays populated at every time step, so ``model.G[-1]`` etc. hold the
         end-of-segment values needed by ``extract_final_x0``.
 
+        When *prev_x0* is supplied the model is initialised with the same
+        carry-over state that was applied during twinning (``_kd_prev``,
+        ``_ka2_prev``, and ``model.x0``), so that the forward trajectory is
+        consistent with the fitted trajectory and the extracted final state is
+        correct for carry-over into the next segment.
+
+        Note: by the time this method is called, *prev_x0* has already had its
+        meal-gut compartments zeroed and ``rbg_data.u[:, 8]`` already contains
+        the carry-over glucose appearance rate — both set by the ``x0_setup``
+        callable that was applied during twinning.  We therefore only need to
+        replicate the model-side part of that setup here.
+
         Args:
             rbg_data: Pre-processed data object for the current segment.
             theta: Plain Python dict of estimated parameters (as returned by
                 ``ReplayBG.twin()``).
+            prev_x0: Numba typed dict of carry-over initial conditions from the
+                previous segment (same object passed to ``x0_setup``).  ``None``
+                for the first accepted segment (cold start).
+            prev_theta: Plain Python dict of estimated parameters from the
+                previous segment, used to scale the insulin compartment initial
+                conditions.  ``None`` for cold start.
 
         Returns:
             Model instance at the end of the simulation.
@@ -291,9 +311,14 @@ class TwinnerOrchestrator:
         theta_typed = to_typed_f32_dict(theta)
         model = self.model_class(
             u2ss=rbg_data.u2ss,
-            theta0=theta_typed,
             tsteps=rbg_data.tsteps,
         )
+        if prev_x0 is not None:
+            pt = prev_theta or {}
+            model._kd_prev = np.float64(pt.get('kd', 0.026))
+            model._ka2_prev = np.float64(pt.get('ka2', 0.014))
+            model.x0 = prev_x0
+        model.reset(theta_typed)
         for t in range(1, rbg_data.tsteps):
             model.step(rbg_data.u[t], t)
         return model

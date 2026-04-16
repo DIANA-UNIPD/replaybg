@@ -201,8 +201,7 @@ class ReplayBG:
         #    print('Creating the digital twin using ' + twinning_method.upper())
 
         # Unpack data to optimize performance during simulation
-        rbg_data = MultiMealT1DData(data=data,
-                           environment=self.environment)  # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
+        rbg_data = MultiMealT1DData(data=data, environment=self.environment)  # TODO: use also the inputs model=model, environment=self.environment to set up the data in a model-agnostic fashion
 
         # convert theta to numba typed dict
         theta_typed = to_typed_f32_dict(theta)

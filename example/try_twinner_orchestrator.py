@@ -15,16 +15,18 @@ from simulator.simulator_orchestrator import SimulatorOrchestrator
 if __name__ == '__main__':
     freeze_support()
 
-    df = pd.read_parquet("data_day_1_2.parquet")
+    df = pd.read_csv("data.csv")
     df['t'] = pd.to_datetime(df['t'])
-
+    df = df.iloc[0:288*10,]
     save_folder = os.path.join(os.path.abspath(''))
 
     rbg = ReplayBG(save_folder=save_folder)
 
     unknown_parameters_prior = {
-        'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
+        'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 250},
         'SG': {'prior': LogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': .5},
+        'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': .5},
+        'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
         'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
         'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
         'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
@@ -48,8 +50,8 @@ if __name__ == '__main__':
         rbg=rbg,
         unknown_parameters_prior=unknown_parameters_prior,
         save_name_prefix='twin',
-        n_starts=4,
-        parallelize=True,
+        n_starts=1,
+        parallelize=False,
         n_jobs=-1,
     )
 

@@ -142,6 +142,7 @@ class Twinner():
         """
         # Simulate the model forward and get the output
         out = np.zeros(data.tsteps, )
+        out[0] = model.output(0)
         for k in np.arange(1,out.shape[0]):
             model.step(data.u[k], k)
             out[k] = model.output(k)
@@ -226,5 +227,5 @@ def _run_optimization(args):
                         options={
                             'maxiter': 100000,
                             'maxfev': 100000,
-                            'disp': False
+                            'disp': True
                         })

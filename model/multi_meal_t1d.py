@@ -3,6 +3,8 @@ from numba import float64, int16, int64
 from numba.typed import Dict
 from numba import types
 
+from utils.numba_dicts import to_typed_f32_dict
+
 from environment.config import jitclass_
 
 theta0_type = types.DictType(types.unicode_type, float64)
@@ -169,6 +171,7 @@ class MultiMealT1DModel:
         self.u2ss = np.float64(u2ss)
         self._kd_prev  = np.float64(0.026)
         self._ka2_prev = np.float64(0.014)
+        self.theta0 = theta0
         self.x0 = x0
         self.tsteps = tsteps
         self.n_u = 10
@@ -238,7 +241,7 @@ class MultiMealT1DModel:
 
         # --- Initial conditions (fall back to steady state if not provided) ---
         self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float64(self.Gb)
-        self._X0 = self.x0["X0"] if "X0" in self.x0 else np.float64(0)
+        self._X0 = self.x0["X0"] if "X0" in self.x0 else np.float64(0) #TODO: check if correct
         # Gut compartments start empty (no meal in progress at t=0)
         self._Qsto1_B_0 = self.x0["Qsto1_B_0"] if "Qsto1_B_0" in self.x0 else np.float64(0)
         self._Qsto2_B_0 = self.x0["Qsto2_B_0"] if "Qsto2_B_0" in self.x0 else np.float64(0)
@@ -268,6 +271,7 @@ class MultiMealT1DModel:
         ki1_prev = self.u2ss / self._kd_prev
         ki2_prev = self._kd_prev / self._ka2_prev * ki1_prev
 
+
         if "Isc10" in self.x0:
             self._Isc10 = ki1 / ki1_prev * self.x0["Isc10"]
         else:
@@ -276,6 +280,7 @@ class MultiMealT1DModel:
             self._Isc20 = ki2 / ki2_prev * self.x0["Isc20"]
         else:
             self._Isc20 = ki2
+
         # Ipb = u2ss/ke regardless of kd/ka2 — no scaling needed
         self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float64(self.Ipb)
         self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else self.Gb
@@ -509,10 +514,6 @@ def _setup_x0(x0, previous_theta=None):
     Returns:
         Callable[(model, data) -> None]: ready to pass as the ``x0_setup``
         argument of :meth:`ReplayBG.twin`.
-
-    Example:
-        >>> setup = MultiMealT1DModel.setup_x0(x0=day1_x0, previous_theta=theta_day1)
-        >>> theta_day2 = rbg.twin(data=rbg_data2, model=model2, ..., x0_setup=setup)
     """
     def setup(model, data):
         pt = previous_theta or {}
@@ -574,9 +575,9 @@ def _setup_x0(x0, previous_theta=None):
         model._kd_prev  = np.float64(pt.get('kd',  0.026))
         model._ka2_prev = np.float64(pt.get('ka2', 0.014))
 
-        # Apply updated x0 and re-initialise state arrays.
+        # Apply updated x0 and re-initialise state arrays, preserving fitted theta.
         model.x0 = x0
-        model.reset(Dict.empty(key_type=types.unicode_type, value_type=float64))
+        model.reset(model.theta0)
 
     return setup
 
@@ -600,7 +601,7 @@ def _extract_final_x0(model):
         Numba typed dict[str, float64] with keys matching the ``x0`` contract
         expected by ``_setup_x0``.
     """
-    from utils.numba_dicts import to_typed_f32_dict
+
 
     state = {
         "G0":        float(model.G[-1]),
@@ -626,6 +627,5 @@ def _extract_final_x0(model):
         "Qgut_H_0":  float(model.Qgut_H[-1]),
     }
     return to_typed_f32_dict(state)
-
 
 MultiMealT1DModel.extract_final_x0 = staticmethod(_extract_final_x0)
