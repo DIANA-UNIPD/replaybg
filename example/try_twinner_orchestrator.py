@@ -15,15 +15,17 @@ from simulator.simulator_orchestrator import SimulatorOrchestrator
 if __name__ == '__main__':
     freeze_support()
 
-    df = pd.read_csv("data.csv")
+    df = pd.read_parquet("data_day_1_2.parquet")
     df['t'] = pd.to_datetime(df['t'])
-    df = df.iloc[0:288*10,]
     save_folder = os.path.join(os.path.abspath(''))
+
+    df.loc[10, 'cho'] = 10
+    df.loc[10, 'cho_label'] = 'B'
 
     rbg = ReplayBG(save_folder=save_folder)
 
     unknown_parameters_prior = {
-        'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 250},
+        'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
         'SG': {'prior': LogNormal(mu=-3.8, sigma=0.5), 'min': 0, 'max': .5},
         'p2': {'prior': Normal(mu=0.11, sigma=0.004), 'min': 0, 'max': .5},
         'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},

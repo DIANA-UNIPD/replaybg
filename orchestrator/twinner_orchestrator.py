@@ -35,6 +35,7 @@ import numpy as np
 
 from orchestrator.quality import default_quality_fn
 from orchestrator.segmentation import segment_4_to_4
+from replaybg import ReplayBG
 from utils.numba_dicts import to_typed_f32_dict
 
 
@@ -73,26 +74,6 @@ class TwinnerOrchestrator:
         parallelize: Whether to parallelise the optimiser across starts.
         n_jobs: Worker count when *parallelize* is ``True``; ``None`` uses all
             CPU cores.
-
-    Example::
-
-        from orchestrator import TwinnerOrchestrator
-        from model.multi_meal_t1d import MultiMealT1DModel
-        from data.multi_meal_t1d_data import MultiMealT1DData
-        from replaybg import ReplayBG
-
-        rbg = ReplayBG(save_folder="results/")
-        orchestrator = TwinnerOrchestrator(
-            model_class=MultiMealT1DModel,
-            data_class=MultiMealT1DData,
-            data=df,
-            bw=75.0,
-            rbg=rbg,
-            unknown_parameters_prior=prior,
-        )
-        results = orchestrator.twin()
-        for r in results:
-            print(r['segment_start'], r['theta'])
     """
 
     def __init__(
@@ -101,7 +82,7 @@ class TwinnerOrchestrator:
         data_class: type,
         data: pd.DataFrame,
         bw: float,
-        rbg,
+        rbg: ReplayBG,
         unknown_parameters_prior: dict,
         segment_fn: Callable[[pd.DataFrame], list[pd.DataFrame]] = segment_4_to_4,
         quality_fn: Callable[[pd.DataFrame], bool] = default_quality_fn,
@@ -175,13 +156,12 @@ class TwinnerOrchestrator:
                 body_weight=self.bw,
                 environment=self.rbg.environment,
             )
-            model = self.model_class(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps)
+            model = self.model_class(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps, t_start=rbg_data.t_start)
 
             # --- Twin this segment ---
             save_name = f"{self.save_name_prefix}_{i:04d}"
             theta = self.rbg.twin(
-                data=rbg_data,
-                bw=self.bw,
+                rbg_data=rbg_data,
                 model=model,
                 save_name=save_name,
                 unknown_parameters_prior=prior,

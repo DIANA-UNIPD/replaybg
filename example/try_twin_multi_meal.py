@@ -13,7 +13,7 @@ from replaybg import ReplayBG
 
 if __name__ == '__main__':
     freeze_support()
-    df = pd.read_parquet("data_day_2.parquet")
+    df = pd.read_parquet("data_day_1.parquet")
     df['t'] = pd.to_datetime(df['t'])
     save_folder = os.path.join(os.path.abspath(''))
     save_name = 'test'
@@ -52,7 +52,7 @@ if __name__ == '__main__':
         #'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
     }
     theta_estimated = dict()
-    theta_estimated['Gb']= np.float64(131.67241217983008)
+    theta_estimated['Gb']= np.float64(150.67241217983008)
     out = rbg.replay(data=df, bw=100, theta=theta_estimated, save_name=save_name)
 
     # TODO: add a plot utility
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     plt.plot(df.glucose)
     plt.plot(out)
     plt.show()
-    theta_estimated = rbg.twin(data=rbg_data, bw=100,
+    theta_estimated = rbg.twin(rbg_data=rbg_data,
                                model=model,
                                save_name=save_name,
                                unknown_parameters_prior=unknown_parameters_prior,

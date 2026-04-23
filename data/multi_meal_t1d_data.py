@@ -115,6 +115,8 @@ class MultiMealT1DData:
         t_m = np.array(data.t.dt.minute.values).astype(int)
         t_h = np.array(data.t.dt.hour.values).astype(int)
 
+        self.t_start = t_h[0] * 60 + t_m[0]
+
         for t in range(data.shape[0]):
             self.t_hour[(t * self.yts):((t + 1) * self.yts)] = t_h[t]
             self.t_min[(t * self.yts):((t + 1) * self.yts)] = np.arange(t_m[t], t_m[t] + self.yts)

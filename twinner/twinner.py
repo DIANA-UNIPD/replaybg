@@ -15,17 +15,6 @@ _worker_args = None
 
 class Twinner():
     """Estimate model parameters by maximizing a posterior objective.
-
-    The twinning procedure searches for the most likely set of model
-    parameters given observed data and prior distributions. Parameters are
-    optimized in an unconstrained space and mapped back to constrained values
-    during evaluation.
-
-    Attributes:
-        parallelize: Whether to run optimizations in parallel.
-        n_jobs: Number of worker processes to use when parallelizing. Use ``-1``
-            to select all available CPU cores.
-        n_starts: Number of random initial guesses used to seed the optimizer.
     """
 
     def __init__(self,
@@ -33,42 +22,20 @@ class Twinner():
                  n_jobs: int | None = None,
                  n_starts: int = 64,
     ):
-        """Initialize a ``Twinner`` instance."""
+        """Initialize a ``Twinner`` instance.
+        """
         self.parallelize = parallelize
         self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
 
 
-    def twin(self, model : Any, data, unknown_parameters_prior, environment) -> dict:
+    def twin(self, model : Any, rbg_data, unknown_parameters_prior) -> dict:
         """Run twinning for a model.
-
-        The method builds an initial guess from the current model parameters,
-        transforms them to an unconstrained space, and then uses Powell
-        optimization to minimize the negative log posterior.
-
-        Args:
-            model: Model instance whose parameters will be estimated. The model
-                must expose attributes for every key in ``unknown_parameters_prior``
-                and implement ``reset()``, ``step()``, and ``output()`` methods.
-            data: Data object containing the observed inputs and measurements used
-                to evaluate the likelihood.
-            unknown_parameters_prior: Dictionary describing the parameters to fit.
-                Each entry should include:
-                - ``prior``: object with an ``evaluate(value)`` method
-                - ``min``: lower bound for the parameter.
-                - ``max``: upper bound for the parameter.
-            environment: Environment object containing runtime settings used by
-                the twinning pipeline.
-
-        Returns:
-            dict: Dictionary containing the optimization result with keys:
-                - ``fun``: Final objective value.
-                - ``x``: Optimized parameter values in unconstrained space.
         """
 
         # Set the worker arguments
         global _worker_args
-        _worker_args = (self._neg_log_posterior, unknown_parameters_prior, model, data)
+        _worker_args = (self._neg_log_posterior, self._log_posterior, unknown_parameters_prior, model, rbg_data)
 
         # Build initial guesses for the parameters using their priors
         start_guesses = []
@@ -96,10 +63,19 @@ class Twinner():
         # Get the best result
         best = min(results, key=lambda r: r.fun)
 
+        # Round integer parameters and clip to bounds (Powell has no native bound support)
+        clipped_x = []
+        for x, (k, v) in zip(best.x, unknown_parameters_prior.items()):
+            if v.get('integer', False):
+                x = float(round(x))
+            clipped_x.append(np.clip(x, v['min'], v['max']))
+        clipped_x = np.array(clipped_x)
+
         # Return the best result
         ret = dict()
         ret['fun'] = best.fun
-        ret['x'] = best.x
+        ret['x'] = clipped_x
+        ret['history'] = best.history
         return ret
 
     def _log_prior(self, model, unknown_parameters_prior):
@@ -125,7 +101,7 @@ class Twinner():
         # Return the sum of log prior contributions
         return lp
 
-    def _log_likelihood(self, model, data, ):
+    def _log_likelihood(self, model, rbg_data):
         """Compute the log likelihood of the observed data under the model.
 
         The model is simulated forward using the input sequence in ``data``.
@@ -134,34 +110,34 @@ class Twinner():
 
         Args:
             model: Model instance to simulate.
-            data: Data object containing inputs, output timestamps, and observed
+            rbg_data: Data object containing inputs, output timestamps, and observed
                 glucose values.
 
         Returns:
             float: Log likelihood value for the simulated trajectory.
         """
         # Simulate the model forward and get the output
-        out = np.zeros(data.tsteps, )
+        out = np.zeros(rbg_data.tsteps, )
         out[0] = model.output(0)
         for k in np.arange(1,out.shape[0]):
-            model.step(data.u[k], k)
+            model.step(rbg_data.u[k], k)
             out[k] = model.output(k)
         # Subsample the output to match the sampling rate of the data
-        out = out[0::data.yts]
+        out = out[0::rbg_data.yts]
 
         # Calculate the log-likelihood with a Gaussian error model (constant coefficient of variation)
         cv = 0.05  # constant coefficient of variation (5%) #TODO: make this a parameter
-        residuals = out[data.y_idxs] - data.y[data.y_idxs]
-        sdn = cv * np.abs(out[data.y_idxs])
+        residuals = out[rbg_data.y_idxs] - rbg_data.y[rbg_data.y_idxs]
+        sdn = cv * np.abs(out[rbg_data.y_idxs])
         return -0.5 * np.sum((residuals / sdn) ** 2)
 
-    def _neg_log_posterior(self, theta, model, data, unknown_parameters_prior):
+    def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
         """Return the negative log posterior for optimization.
 
         Args:
             theta: Parameter vector in unconstrained space.
             model: Model instance being fit.
-            data: Data object used to compute the likelihood.
+            rbg_data: Data object used to compute the likelihood.
             unknown_parameters_prior: Dictionary describing priors and bounds for
                 the parameters.
 
@@ -169,10 +145,11 @@ class Twinner():
             float: Negative log posterior value.
         """
         # Just return the negative log-posterior
-        return -self._log_posterior(theta, model, data, unknown_parameters_prior)
+        _, _, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
+        return -log_post
 
-    def _log_posterior(self, theta, model, data, unknown_parameters_prior):
-        """Compute the log posterior for a parameter vector.
+    def _log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
+        """Compute log-prior, log-likelihood, and log-posterior in one model pass.
 
         The input parameter vector is assumed to be in unconstrained space.
         Parameters are mapped back to constrained values before updating the
@@ -181,20 +158,22 @@ class Twinner():
         Args:
             theta: Parameter vector in unconstrained space.
             model: Model instance being updated with candidate parameters.
-            data: Data object used to compute the likelihood.
+            rbg_data: Data object used to compute the likelihood.
             unknown_parameters_prior: Dictionary describing priors and bounds for
                 the parameters.
 
         Returns:
-            float: Log-posterior value, or ``-np.inf`` if the prior is invalid.
+            tuple: ``(log_prior, log_likelihood, log_posterior)``. Any component
+                that is invalid is returned as ``-np.inf``.
         """
 
         # Create the theta input dictionary (note: order is maintained by construction)
         theta_dict = Dict.empty(key_type=types.unicode_type, value_type=float64)
         for i, k in enumerate(unknown_parameters_prior.keys()):
             val = theta[i]
+            #val = np.clip(theta[i], unknown_parameters_prior[k]['min'], unknown_parameters_prior[k]['max'])
             if unknown_parameters_prior[k].get('integer', False):
-                val = float(round(val))
+                val = int(round(val))
             theta_dict[k] = val
 
         # Reset the model with the new parameters
@@ -203,29 +182,42 @@ class Twinner():
         # Calculate log-prior
         lp = self._log_prior(model, unknown_parameters_prior)
         if lp == -np.inf or np.isnan(lp):
-            return -np.inf
+            return -np.inf, -np.inf, -np.inf
         # Calculate log-likelihood
-        ll = self._log_likelihood(model, data)
+        ll = self._log_likelihood(model, rbg_data)
         if ll == -np.inf or np.isnan(ll):
-            return -np.inf
+            return lp, -np.inf, -np.inf
 
         # Return log-posterior
-        return lp + ll
+        return lp, ll, lp + ll
 
 def _run_optimization(args):
     # Unpack the arguments
     i, start_guess = args
 
     # Get the worker arguments
-    neg_log_posterior_fn, unknown_parameters_prior, model, data = _worker_args
+    neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data = _worker_args
 
+    history = []
+
+    def history_callback(xk):
+        lp, ll, lpost = log_posterior_components_fn(xk, model, rbg_data, unknown_parameters_prior)
+        history.append({
+            'theta': xk.copy(),
+            'log_prior': lp,
+            'log_likelihood': ll,
+            'log_posterior': lpost,
+        })
     # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return minimize(neg_log_posterior_fn, start_guess, method='Powell',
-                        args=(model, data, unknown_parameters_prior,),
-                        options={
-                            'maxiter': 100000,
-                            'maxfev': 100000,
-                            'disp': True
-                        })
+        result = minimize(neg_log_posterior_fn, start_guess, method='Powell',
+                          args=(model, rbg_data, unknown_parameters_prior,),
+                          callback=history_callback,
+                          options={
+                              'maxiter': 100000,
+                              'maxfev': 100000,
+                              'disp': False
+                          })
+    result.history = history
+    return result

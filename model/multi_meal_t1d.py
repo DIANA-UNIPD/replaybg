@@ -12,6 +12,8 @@ x0_type = types.DictType(types.unicode_type, float64)
 JITCLASS_SPEC = [
     ("_kd_prev", float64),
     ("_ka2_prev", float64),
+    ("_SI_last_prev", float64),
+    ("_VI_prev", float64),
     ("_G0", float64),
     ("_X0", float64),
     ("_Qsto1_B_0", float64),
@@ -85,6 +87,7 @@ JITCLASS_SPEC = [
     ("theta0", theta0_type),
     ("x0", x0_type),
     ("tsteps", int16),
+    ("t_start", int16),
     ("n_u", int16),
     ("u", float64[:,:]),
 ]
@@ -93,56 +96,6 @@ JITCLASS_SPEC = [
 @jitclass_(JITCLASS_SPEC)
 class MultiMealT1DModel:
     """Physiological model of glucose-insulin dynamics for a type 1 diabetic patient with multiple daily meals.
-
-    The model extends the Hovorka / UVA-Padova single-meal structure to five
-    separate meal slots (Breakfast, Lunch, Dinner, Snack, Hypo-treatment), each
-    with its own gut-absorption chain and absorption rate constant. Insulin
-    pharmacokinetics follow a two-compartment subcutaneous absorption model.
-    Glucose risk is captured via a non-symmetric risk function that penalises
-    hypoglycaemia more than hyperglycaemia.
-
-    State variables (all stored as arrays indexed by minute):
-        G:        Plasma glucose concentration (mg/dL).
-        X:        Remote insulin action (1/min).
-        IG:       Interstitial glucose concentration (mg/dL).
-        Qsto1_*:  Carbohydrate in the stomach solid phase for each meal slot (mg).
-        Qsto2_*:  Carbohydrate in the stomach liquid phase for each meal slot (mg).
-        Qgut_*:   Carbohydrate in the intestine for each meal slot (mg).
-        Isc1:     Subcutaneous insulin in compartment 1 (pmol/kg).
-        Isc2:     Subcutaneous insulin in compartment 2 (pmol/kg).
-        Ip:       Plasma insulin (pmol/kg).
-
-    Attributes:
-        u2ss: Steady-state basal insulin infusion rate (pmol/kg/min).
-        tsteps: Length of the simulation in minutes.
-        n_u: Number of input channels (8: 5 meal slots, 2 insulin channels, 1 hour-of-day).
-        Gb: Basal plasma glucose concentration (mg/dL).
-        SG: Glucose effectiveness (1/min).
-        SI_B: Insulin sensitivity during breakfast hours (dL/kg/pmol/min).
-        SI_L: Insulin sensitivity during lunch hours (dL/kg/pmol/min).
-        SI_D: Insulin sensitivity during dinner/night hours (dL/kg/pmol/min).
-        p2: Rate constant of the remote insulin compartment (1/min).
-        r1: Risk function scaling parameter.
-        r2: Risk function shape parameter.
-        ka2: Absorption rate from subcutaneous compartment 2 to plasma (1/min).
-        kd: Transfer rate from subcutaneous compartment 1 to 2 (1/min).
-        ke: Elimination rate of plasma insulin (1/min).
-        tau: Insulin absorption delay (minutes, integer).
-        kempt: Gastric emptying rate constant shared across all meal slots (1/min).
-        kabs_B: Intestinal absorption rate for breakfast (1/min).
-        kabs_L: Intestinal absorption rate for lunch (1/min).
-        kabs_D: Intestinal absorption rate for dinner (1/min).
-        kabs_S: Intestinal absorption rate for snack (1/min).
-        kabs_H: Intestinal absorption rate for hypo-treatment (1/min).
-        beta_B: Meal announcement delay for breakfast (minutes, integer).
-        beta_L: Meal announcement delay for lunch (minutes, integer).
-        beta_D: Meal announcement delay for dinner (minutes, integer).
-        beta_S: Meal announcement delay for snack (minutes, integer).
-        f: Carbohydrate bioavailability fraction (dimensionless).
-        VG: Glucose distribution volume (dL/kg).
-        VI: Insulin distribution volume (L/kg).
-        alpha: Time constant of the interstitial glucose filter (minutes, integer).
-        Ipb: Basal plasma insulin concentration (pmol/kg).
     """
 
     def __init__(self,
@@ -150,51 +103,31 @@ class MultiMealT1DModel:
                  theta0=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  x0=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  tsteps=1440,
+                 t_start=240,
                  ):
         """Initialize the model and allocate state arrays.
-
-        Args:
-            u2ss: Steady-state basal insulin infusion rate (pmol/kg/min). Used
-                to compute the basal plasma insulin ``Ipb`` and the default
-                initial conditions for the insulin compartments.
-            theta0: Optional dictionary of named parameter overrides. Any key
-                not present falls back to the physiological default defined in
-                ``reset()``.
-            x0: Optional dictionary of named initial-condition overrides. Any
-                key not present falls back to the steady-state default.
-            tsteps: Length of the simulation in minutes. Determines the size of
-                all state arrays.
-
-        Returns:
-            None
         """
-        self.u2ss = np.float64(u2ss)
         self._kd_prev  = np.float64(0.026)
         self._ka2_prev = np.float64(0.014)
+        self._VI_prev  = np.float64(0.135)
+        self._SI_last_prev = np.float64(10.35e-4 / 1.45) # 1.45 instead of dynamic VG
+
         self.theta0 = theta0
         self.x0 = x0
         self.tsteps = tsteps
-        self.n_u = 10
-        self.reset(theta0)
 
+        self.t_start = np.int16(t_start)
+
+        self.n_u = 10
+
+        self.u2ss = u2ss
+
+        self.reset(theta0)
 
     def reset(self,
               theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
               ):
         """Reset all model parameters and re-initialise state arrays.
-
-        Parameters are loaded from ``theta0`` when present; otherwise
-        population-average defaults are used. Initial conditions are loaded
-        from ``self.x0`` when present; otherwise steady-state values derived
-        from ``u2ss`` are used. All state arrays are re-allocated and set to
-        their initial conditions.
-
-        Args:
-            theta0: Dictionary of named parameter values to apply. Keys absent
-                from the dictionary fall back to physiological defaults.
-
-        Returns:
-            None
         """
         # --- Structural / volume parameters ---
         self.f = theta0["f"] if "f" in theta0 else np.float64(0.9)
@@ -241,7 +174,23 @@ class MultiMealT1DModel:
 
         # --- Initial conditions (fall back to steady state if not provided) ---
         self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float64(self.Gb)
-        self._X0 = self.x0["X0"] if "X0" in self.x0 else np.float64(0) #TODO: check if correct
+
+        # X = (SI/VI)*(Ip - Ipb): when SI or VI change across segments, X0 must be
+        # rescaled by the ratio of (SI_first/VI) for the current segment to
+        # (SI_last/VI) for the previous segment, where SI_last is the sensitivity
+        # active during the last minute of the previous segment (hour t_start-1).
+        h_first = int(self.t_start // 60) % 24
+        if h_first < 4 or h_first >= 17:
+            SI_first = self.SI_D
+        elif h_first < 11:
+            SI_first = self.SI_B
+        else:
+            SI_first = self.SI_L
+        if "X0" in self.x0:
+            self._X0 = (SI_first / self.VI) / (self._SI_last_prev / self._VI_prev) * self.x0["X0"]
+        else:
+            self._X0 = np.float64(0)
+
         # Gut compartments start empty (no meal in progress at t=0)
         self._Qsto1_B_0 = self.x0["Qsto1_B_0"] if "Qsto1_B_0" in self.x0 else np.float64(0)
         self._Qsto2_B_0 = self.x0["Qsto2_B_0"] if "Qsto2_B_0" in self.x0 else np.float64(0)
@@ -342,33 +291,6 @@ class MultiMealT1DModel:
 
     def step(self, u: float64[:], t: int64):
         """Advance the model by one minute using Backward Euler integration.
-
-        This is the primary integration method used during twinning and replay.
-        The full input history is stored in ``self.u`` to support integer-minute
-        meal announcement delays (``beta_*``) and insulin absorption delay
-        (``tau``). The Backward Euler discretisation is applied sequentially
-        along the physiological cascade (Gauss-Seidel order), which is
-        equivalent to a simultaneous implicit solve for this DAG-structured
-        system. The nonlinear risk term is treated semi-implicitly — its
-        coefficient is evaluated at ``G[t-1]`` to avoid a nonlinear solve while
-        preserving first-order accuracy.
-
-        Args:
-            u: Input vector of length ``n_u`` containing:
-                - u[0]: Breakfast carbohydrate rate (mg/kg/min).
-                - u[1]: Lunch carbohydrate rate (mg/kg/min).
-                - u[2]: Dinner carbohydrate rate (mg/kg/min).
-                - u[3]: Snack carbohydrate rate (mg/kg/min).
-                - u[4]: Hypo-treatment carbohydrate rate (mg/kg/min).
-                - u[5]: Basal insulin infusion rate (pmol/kg/min).
-                - u[6]: Bolus insulin rate (pmol/kg/min).
-                - u[7]: Hour of day (0–23), used to select insulin sensitivity.
-                - u[8]: Glucose infusion rate (mg/kg/min) — forcing input added directly to the plasma glucose compartment.
-                - u[9]: Extra plasma insulin (pmol/kg) — forcing input added inside the ``(Ip[t] - Ipb)`` drive of the remote insulin compartment X.
-            t: Current simulation time step (integer minute index, >= 1).
-
-        Returns:
-            None
         """
         # Store current inputs in the history buffer so delayed values can be
         # retrieved at this or future timesteps via index arithmetic.
@@ -459,11 +381,11 @@ class MultiMealT1DModel:
         # Subcutaneous compartment 1 → compartment 2 → plasma
         self.Isc1[t] = (self.Isc1[t-1] + u_i) * kd_fac
         self.Isc2[t] = (self.Isc2[t-1] + self.kd * self.Isc1[t]) / (1 + self.ka2)
-        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t]) / (1 + self.ke)
+        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t] + forcing_ip) / (1 + self.ke)
 
         # --- Insulin action and glucose (Backward Euler) ---
         # X depends on Ip[t] (just computed above)
-        self.X[t] = (self.X[t-1] + self.p2 * (SI / self.VI) * (self.Ip[t] - self.Ipb + forcing_ip)) / (1 + self.p2)
+        self.X[t] = (self.X[t-1] + self.p2 * (SI / self.VI) * (self.Ip[t] - self.Ipb)) / (1 + self.p2)
         # G depends on X[t] and all Qgut[t] (just computed). The risk coefficient
         # is frozen at G[t-1] (semi-implicit) to keep the update linear in G[t].
         self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * (
@@ -571,9 +493,22 @@ def _setup_x0(x0, previous_theta=None):
         ]:
             x0[key] = np.float64(0.0)
 
-        # Store previous-day insulin params so reset() can scale Isc1/Isc2.
+        # Store previous-day insulin params so reset() can scale Isc1/Isc2 and X.
         model._kd_prev  = np.float64(pt.get('kd',  0.026))
         model._ka2_prev = np.float64(pt.get('ka2', 0.014))
+        model._VI_prev = np.float64(pt.get('VI', 0.135))
+
+        # SI active during the last minute of the previous segment is SI at
+        # hour (t_start - 1) % 24, using the time-of-day windows from step().
+        h_last = ((int(model.t_start) - 1) // 60) % 24
+        vg_prev = pt.get('VG', 1.45)
+        si_default = 10.35e-4 / vg_prev
+        if h_last < 4 or h_last >= 17:
+            model._SI_last_prev = np.float64(pt.get('SI_D', si_default))
+        elif h_last < 11:
+            model._SI_last_prev = np.float64(pt.get('SI_B', si_default))
+        else:
+            model._SI_last_prev = np.float64(pt.get('SI_L', si_default))
 
         # Apply updated x0 and re-initialise state arrays, preserving fitted theta.
         model.x0 = x0
