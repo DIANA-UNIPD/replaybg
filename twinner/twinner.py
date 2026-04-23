@@ -198,16 +198,19 @@ def _run_optimization(args):
     # Get the worker arguments
     neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data = _worker_args
 
-    history = []
+    history = dict()
+    history['theta'] = []
+    history['log_prior'] = []
+    history['log_likelihood'] = []
+    history['log_posterior'] = []
 
     def history_callback(xk):
         lp, ll, lpost = log_posterior_components_fn(xk, model, rbg_data, unknown_parameters_prior)
-        history.append({
-            'theta': xk.copy(),
-            'log_prior': lp,
-            'log_likelihood': ll,
-            'log_posterior': lpost,
-        })
+        history['theta'].append(xk.copy())
+        history['log_prior'].append(lp)
+        history['log_likelihood'].append(ll)
+        history['log_posterior'].append(lpost)
+
     # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -217,7 +220,7 @@ def _run_optimization(args):
                           options={
                               'maxiter': 100000,
                               'maxfev': 100000,
-                              'disp': False
+                              'disp': True
                           })
     result.history = history
     return result
