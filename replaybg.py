@@ -54,9 +54,13 @@ class ReplayBG:
                                        rbg_data=rbg_data,
                                        unknown_parameters_prior=unknown_parameters_prior)
 
+
         # TODO: save results before return
 
-        return dict(zip(unknown_parameters_prior.keys(), theta_estimated['x']))
+        return {
+            'theta': dict(zip(unknown_parameters_prior.keys(), theta_estimated['x'])),
+            'history': twinner.history,
+        }
 
 
     def replay(self, data: pd.DataFrame, theta, bw: float, save_name: str,

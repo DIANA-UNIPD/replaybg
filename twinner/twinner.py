@@ -28,6 +28,11 @@ class Twinner():
         self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
 
+        self.history = dict()
+        self.history['theta'] = []
+        self.history['log_prior'] = []
+        self.history['log_likelihood'] = []
+        self.history['log_posterior'] = []
 
     def twin(self, model : Any, rbg_data, unknown_parameters_prior) -> dict:
         """Run twinning for a model.
@@ -75,7 +80,6 @@ class Twinner():
         ret = dict()
         ret['fun'] = best.fun
         ret['x'] = clipped_x
-        ret['history'] = best.history
         return ret
 
     def _log_prior(self, model, unknown_parameters_prior):
@@ -145,7 +149,14 @@ class Twinner():
             float: Negative log posterior value.
         """
         # Just return the negative log-posterior
-        _, _, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
+        log_prior, log_likelihood, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
+
+        # log the history
+        self.history['theta'].append(theta)
+        self.history['log_prior'].append(log_prior)
+        self.history['log_likelihood'].append(log_likelihood)
+        self.history['log_posterior'].append(log_post)
+
         return -log_post
 
     def _log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
@@ -198,29 +209,17 @@ def _run_optimization(args):
     # Get the worker arguments
     neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data = _worker_args
 
-    history = dict()
-    history['theta'] = []
-    history['log_prior'] = []
-    history['log_likelihood'] = []
-    history['log_posterior'] = []
-
-    def history_callback(xk):
-        lp, ll, lpost = log_posterior_components_fn(xk, model, rbg_data, unknown_parameters_prior)
-        history['theta'].append(xk.copy())
-        history['log_prior'].append(lp)
-        history['log_likelihood'].append(ll)
-        history['log_posterior'].append(lpost)
 
     # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = minimize(neg_log_posterior_fn, start_guess, method='Powell',
+        bounds = [(v['min'], v['max']) for v in unknown_parameters_prior.values()]
+        result = minimize(neg_log_posterior_fn, start_guess, method='trust-constr',
+                          bounds=bounds,
                           args=(model, rbg_data, unknown_parameters_prior,),
-                          callback=history_callback,
                           options={
                               'maxiter': 100000,
-                              'maxfev': 100000,
+                              #'maxfev': 100000,
                               'disp': True
                           })
-    result.history = history
     return result
