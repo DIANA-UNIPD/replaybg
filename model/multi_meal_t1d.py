@@ -3,11 +3,11 @@ from numba import float64, int16, int64
 from numba.typed import Dict
 from numba import types
 
-from utils.numba_dicts import to_typed_f32_dict
 
 from environment.config import jitclass_
 
 theta0_type = types.DictType(types.unicode_type, float64)
+theta_prev_type = types.DictType(types.unicode_type, float64)
 x0_type = types.DictType(types.unicode_type, float64)
 JITCLASS_SPEC = [
     ("_kd_prev", float64),
@@ -85,11 +85,13 @@ JITCLASS_SPEC = [
     ("Ipb", float64),
     ("u2ss", float64),
     ("theta0", theta0_type),
+    ("theta_prev", theta_prev_type),
     ("x0", x0_type),
     ("tsteps", int16),
     ("t_start", int16),
     ("n_u", int16),
     ("u", float64[:,:]),
+    ("previous_ra", float64[:]),
 ]
 
 
@@ -104,31 +106,59 @@ class MultiMealT1DModel:
                  x0=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  tsteps=1440,
                  t_start=240,
+                 theta_prev=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  ):
         """Initialize the model and allocate state arrays.
         """
-        self._kd_prev  = np.float64(0.026)
-        self._ka2_prev = np.float64(0.014)
-        self._VI_prev  = np.float64(0.135)
-        self._SI_last_prev = np.float64(10.35e-4 / 1.45) # 1.45 instead of dynamic VG
 
+        # Previous "segment" parameters (needed to scale initial conditions if x0 is provided)
+        #self._kd_prev  = np.float64(0.026)
+        #self._ka2_prev = np.float64(0.014)
+        #self._VI_prev  = np.float64(0.135)
+        #self._SI_last_prev = np.float64(10.35e-4 / 1.45) # 1.45 instead of dynamic VG
+
+        # Initial values of the model parameters (just a subset) and states
         self.theta0 = theta0
         self.x0 = x0
-        self.tsteps = tsteps
-
+        self.tsteps = np.int16(tsteps)
         self.t_start = np.int16(t_start)
 
-        self.n_u = 10
+        # Number of inputs
+        self.n_u = np.int8(8)
 
+        # Steady-state basal insulin (u2ss)
         self.u2ss = u2ss
 
+        # Set previous "segment" parameters (needed to scale initial conditions if x0 is provided)
+        self.theta_prev = theta_prev
+
+        # Overwrite x0 of stomach before resetting the first time
+        if len(self.theta_prev) > 0:
+            self._override_stomach()
+
+        # Launch reset() to initialise state arrays and model parameters
         self.reset(theta0)
 
     def reset(self,
               theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
               ):
-        """Reset all model parameters and re-initialise state arrays.
+        """Resets all model parameters and re-initialise state arrays.
+        Parameters are set to those provided in theta0, or to default values if not provided.
         """
+
+        # Reset parameters first
+        self._reset_theta(theta0)
+
+        # Reset state initial conditions
+        self._reset_x0()
+
+        # Reset inputs
+        self._reset_u()
+
+
+    def _reset_theta(self,
+              theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
+              ):
         # --- Structural / volume parameters ---
         self.f = theta0["f"] if "f" in theta0 else np.float64(0.9)
         self.VG = theta0["VG"] if "VG" in theta0 else np.float64(1.45)
@@ -172,8 +202,72 @@ class MultiMealT1DModel:
         self.beta_D = np.int16(theta0["beta_D"]) if "beta_D" in theta0 else np.int16(0)
         self.beta_S = np.int16(theta0["beta_S"]) if "beta_S" in theta0 else np.int16(0)
 
+    def _reset_x0(self):
+
         # --- Initial conditions (fall back to steady state if not provided) ---
+
+        # Glucose compartments
         self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float64(self.Gb)
+        self.G = np.empty((self.tsteps,), dtype=np.float64)
+        self.G[0] = self._G0
+
+        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else np.float64(self.Gb)
+        self.IG = np.empty((self.tsteps,), dtype=np.float64)
+        self.IG[0] = self._IG0
+
+        # Gut compartments start empty (no meal in progress at t=0)
+        self._Qsto1_B_0 = self.x0["Qsto1_B_0"] if "Qsto1_B_0" in self.x0 else np.float64(0)
+        self.Qsto1_B = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_B[0] = self._Qsto1_B_0
+        self._Qsto2_B_0 = self.x0["Qsto2_B_0"] if "Qsto2_B_0" in self.x0 else np.float64(0)
+        self.Qsto2_B = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_B[0] = self._Qsto2_B_0
+        self._Qgut_B_0 = self.x0["Qgut_B_0"] if "Qgut_B_0" in self.x0 else np.float64(0)
+        self.Qgut_B = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_B[0] = self._Qgut_B_0
+
+        self._Qsto1_L_0 = self.x0["Qsto1_L_0"] if "Qsto1_L_0" in self.x0 else np.float64(0)
+        self.Qsto1_L = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_L[0] = self._Qsto1_L_0
+        self._Qsto2_L_0 = self.x0["Qsto2_L_0"] if "Qsto2_L_0" in self.x0 else np.float64(0)
+        self.Qsto2_L = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_L[0] = self._Qsto2_L_0
+        self._Qgut_L_0 = self.x0["Qgut_L_0"] if "Qgut_L_0" in self.x0 else np.float64(0)
+        self.Qgut_L = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_L[0] = self._Qgut_L_0
+
+        self._Qsto1_D_0 = self.x0["Qsto1_D_0"] if "Qsto1_D_0" in self.x0 else np.float64(0)
+        self.Qsto1_D = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_D[0] = self._Qsto1_D_0
+        self._Qsto2_D_0 = self.x0["Qsto2_D_0"] if "Qsto2_D_0" in self.x0 else np.float64(0)
+        self.Qsto2_D = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_D[0] = self._Qsto2_D_0
+        self._Qgut_D_0 = self.x0["Qgut_D_0"] if "Qgut_D_0" in self.x0 else np.float64(0)
+        self.Qgut_D = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_D[0] = self._Qgut_D_0
+
+        self._Qsto1_S_0 = self.x0["Qsto1_S_0"] if "Qsto1_S_0" in self.x0 else np.float64(0)
+        self.Qsto1_S = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_S[0] = self._Qsto1_S_0
+        self._Qsto2_S_0 = self.x0["Qsto2_S_0"] if "Qsto2_S_0" in self.x0 else np.float64(0)
+        self.Qsto2_S = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_S[0] = self._Qsto2_S_0
+        self._Qgut_S_0 = self.x0["Qgut_S_0"] if "Qgut_S_0" in self.x0 else np.float64(0)
+        self.Qgut_S = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_S[0] = self._Qgut_S_0
+
+        self._Qsto1_H_0 = self.x0["Qsto1_H_0"] if "Qsto1_H_0" in self.x0 else np.float64(0)
+        self.Qsto1_H = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_H[0] = self._Qsto1_H_0
+        self._Qsto2_H_0 = self.x0["Qsto2_H_0"] if "Qsto2_H_0" in self.x0 else np.float64(0)
+        self.Qsto2_H = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_H[0] = self._Qsto2_H_0
+        self._Qgut_H_0 = self.x0["Qgut_H_0"] if "Qgut_H_0" in self.x0 else np.float64(0)
+        self.Qgut_H = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_H[0] = self._Qgut_H_0
+
+
+        # Insulin action
 
         # X = (SI/VI)*(Ip - Ipb): when SI or VI change across segments, X0 must be
         # rescaled by the ratio of (SI_first/VI) for the current segment to
@@ -186,27 +280,14 @@ class MultiMealT1DModel:
             SI_first = self.SI_B
         else:
             SI_first = self.SI_L
-        if "X0" in self.x0:
-            self._X0 = (SI_first / self.VI) / (self._SI_last_prev / self._VI_prev) * self.x0["X0"]
+        if "X0" in self.x0 and len(self.theta_prev) > 0:
+            self._X0 = (SI_first / self.VI) / (self.theta_prev["SI_last"] / self.theta_prev["VI"]) * self.x0["X0"]
         else:
             self._X0 = np.float64(0)
+        self.X = np.empty((self.tsteps,), dtype=np.float64)
+        self.X[0] = self._X0
 
-        # Gut compartments start empty (no meal in progress at t=0)
-        self._Qsto1_B_0 = self.x0["Qsto1_B_0"] if "Qsto1_B_0" in self.x0 else np.float64(0)
-        self._Qsto2_B_0 = self.x0["Qsto2_B_0"] if "Qsto2_B_0" in self.x0 else np.float64(0)
-        self._Qgut_B_0 = self.x0["Qgut_B_0"] if "Qgut_B_0" in self.x0 else np.float64(0)
-        self._Qsto1_L_0 = self.x0["Qsto1_L_0"] if "Qsto1_L_0" in self.x0 else np.float64(0)
-        self._Qsto2_L_0 = self.x0["Qsto2_L_0"] if "Qsto2_L_0" in self.x0 else np.float64(0)
-        self._Qgut_L_0 = self.x0["Qgut_L_0"] if "Qgut_L_0" in self.x0 else np.float64(0)
-        self._Qsto1_D_0 = self.x0["Qsto1_D_0"] if "Qsto1_D_0" in self.x0 else np.float64(0)
-        self._Qsto2_D_0 = self.x0["Qsto2_D_0"] if "Qsto2_D_0" in self.x0 else np.float64(0)
-        self._Qgut_D_0 = self.x0["Qgut_D_0"] if "Qgut_D_0" in self.x0 else np.float64(0)
-        self._Qsto1_S_0 = self.x0["Qsto1_S_0"] if "Qsto1_S_0" in self.x0 else np.float64(0)
-        self._Qsto2_S_0 = self.x0["Qsto2_S_0"] if "Qsto2_S_0" in self.x0 else np.float64(0)
-        self._Qgut_S_0 = self.x0["Qgut_S_0"] if "Qgut_S_0" in self.x0 else np.float64(0)
-        self._Qsto1_H_0 = self.x0["Qsto1_H_0"] if "Qsto1_H_0" in self.x0 else np.float64(0)
-        self._Qsto2_H_0 = self.x0["Qsto2_H_0"] if "Qsto2_H_0" in self.x0 else np.float64(0)
-        self._Qgut_H_0 = self.x0["Qgut_H_0"] if "Qgut_H_0" in self.x0 else np.float64(0)
+        # Subcutaneous insulin absorption
 
         # Insulin compartments start at the basal steady state derived from u2ss.
         # When x0 carries values from the previous day, they are scaled by the ratio of
@@ -217,77 +298,38 @@ class MultiMealT1DModel:
         ki2 = self.kd / self.ka2 * ki1
         self.Ipb = self.ka2 / self.ke * ki2  # basal plasma insulin
 
-        ki1_prev = self.u2ss / self._kd_prev
-        ki2_prev = self._kd_prev / self._ka2_prev * ki1_prev
+        if len(self.theta_prev) > 0:
+            ki1_prev = self.u2ss / self.theta_prev["kd"]
+            ki2_prev = self.theta_prev["kd"] / self.theta_prev["ka2"] * ki1_prev
 
-
-        if "Isc10" in self.x0:
+        if "Isc10" in self.x0 and len(self.theta_prev) > 0:
             self._Isc10 = ki1 / ki1_prev * self.x0["Isc10"]
         else:
             self._Isc10 = ki1
-        if "Isc20" in self.x0:
+        self.Isc1 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Isc1[0] = self._Isc10
+
+        if "Isc20" in self.x0 and len(self.theta_prev) > 0:
             self._Isc20 = ki2 / ki2_prev * self.x0["Isc20"]
         else:
             self._Isc20 = ki2
+            
+        self.Isc2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Isc2[0] = self._Isc20
 
         # Ipb = u2ss/ke regardless of kd/ka2 — no scaling needed
         self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float64(self.Ipb)
-        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else self.Gb
-
-        # --- Allocate state arrays and set t=0 values ---
-        self.G = np.empty((self.tsteps,), dtype=np.float64)
-        self.G[0] = self._G0
-        self.X = np.empty((self.tsteps,), dtype=np.float64)
-        self.X[0] = self._X0
-
-        self.Qsto1_B = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1_B[0] = self._Qsto1_B_0
-        self.Qsto2_B = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2_B[0] = self._Qsto2_B_0
-        self.Qgut_B = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut_B[0] = self._Qgut_B_0
-
-        self.Qsto1_L = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1_L[0] = self._Qsto1_L_0
-        self.Qsto2_L = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2_L[0] = self._Qsto2_L_0
-        self.Qgut_L = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut_L[0] = self._Qgut_L_0
-
-        self.Qsto1_D = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1_D[0] = self._Qsto1_D_0
-        self.Qsto2_D = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2_D[0] = self._Qsto2_D_0
-        self.Qgut_D = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut_D[0] = self._Qgut_D_0
-
-        self.Qsto1_S = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1_S[0] = self._Qsto1_S_0
-        self.Qsto2_S = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2_S[0] = self._Qsto2_S_0
-        self.Qgut_S = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut_S[0] = self._Qgut_S_0
-
-        self.Qsto1_H = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1_H[0] = self._Qsto1_H_0
-        self.Qsto2_H = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2_H[0] = self._Qsto2_H_0
-        self.Qgut_H = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut_H[0] = self._Qgut_H_0
-
-        self.Isc1 = np.empty((self.tsteps,), dtype=np.float64)
-        self.Isc1[0] = self._Isc10
-        self.Isc2 = np.empty((self.tsteps,), dtype=np.float64)
-        self.Isc2[0] = self._Isc20
         self.Ip = np.empty((self.tsteps,), dtype=np.float64)
         self.Ip[0] = self._Ip0
-        self.IG = np.empty((self.tsteps,), dtype=np.float64)
-        self.IG[0] = self._IG0
 
+    def _reset_u(self):
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
         self.u[5, 0] = self.u2ss
         self.u[6, 0] = 0.0  # no bolus at t=0
+        if len(self.theta_prev) == 0:
+            self.previous_ra = np.zeros(self.tsteps)
+
 
     def step(self, u: float64[:], t: int64):
         """Advance the model by one minute using Backward Euler integration.
@@ -381,7 +423,7 @@ class MultiMealT1DModel:
         # Subcutaneous compartment 1 → compartment 2 → plasma
         self.Isc1[t] = (self.Isc1[t-1] + u_i) * kd_fac
         self.Isc2[t] = (self.Isc2[t-1] + self.kd * self.Isc1[t]) / (1 + self.ka2)
-        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t] + forcing_ip) / (1 + self.ke)
+        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t]) / (1 + self.ke)
 
         # --- Insulin action and glucose (Backward Euler) ---
         # X depends on Ip[t] (just computed above)
@@ -390,7 +432,7 @@ class MultiMealT1DModel:
         # is frozen at G[t-1] (semi-implicit) to keep the update linear in G[t].
         self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * (
                 self.kabs_B * self.Qgut_B[t] + self.kabs_L * self.Qgut_L[t] + self.kabs_D * self.Qgut_D[t] +
-                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t]) / self.VG + forcing_ra / self.VG) / (1 + self.SG + risk * self.X[t])
+                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t]) / self.VG + self.previous_ra[t-1] / self.VG) / (1 + self.SG + risk * self.X[t])
         # Interstitial glucose: first-order low-pass filter on plasma glucose
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 
@@ -408,159 +450,150 @@ class MultiMealT1DModel:
         """
         return self.IG[t]
 
+    def get_final_x0(self):
+        """Return the final state of the model as a Numba typed dict.
 
-def _setup_x0(x0, previous_theta=None):
-    """Factory returning a ``(model, data) -> None`` callable for ``ReplayBG.twin(x0_setup=...)``.
+        Reads the last time-step of every state array and packs the values
+        into a typed dict suitable for passing as ``x0`` to a subsequent
+        segment's ``reset()`` call.
 
-    Computes the carry-over glucose appearance rate (``previous_Ra``) from the
-    meal gut-compartment values stored in *x0*, injects it into
-    ``data.forcing_ra`` / ``data.u[:, 8]``, resets the meal compartments in *x0*
-    to zero, and stores the previous-day insulin kinetic parameters on the model
-    so that :meth:`MultiMealT1DModel.reset` can correctly scale the ``Isc1``/
-    ``Isc2`` initial conditions on every optimizer trial.
+        Returns:
+            Numba typed dict[unicode, float64] with keys matching the ``x0``
+            contract expected by ``reset()``.
+        """
+        final_x0 = Dict.empty(key_type=types.unicode_type, value_type=float64)
+        final_x0["G0"]        = self.G[-1]
+        final_x0["X0"]        = self.X[-1]
+        final_x0["IG0"]       = self.IG[-1]
+        final_x0["Isc10"]     = self.Isc1[-1]
+        final_x0["Isc20"]     = self.Isc2[-1]
+        final_x0["Ip0"]       = self.Ip[-1]
+        final_x0["Qsto1_B_0"] = self.Qsto1_B[-1]
+        final_x0["Qsto2_B_0"] = self.Qsto2_B[-1]
+        final_x0["Qgut_B_0"]  = self.Qgut_B[-1]
+        final_x0["Qsto1_L_0"] = self.Qsto1_L[-1]
+        final_x0["Qsto2_L_0"] = self.Qsto2_L[-1]
+        final_x0["Qgut_L_0"]  = self.Qgut_L[-1]
+        final_x0["Qsto1_D_0"] = self.Qsto1_D[-1]
+        final_x0["Qsto2_D_0"] = self.Qsto2_D[-1]
+        final_x0["Qgut_D_0"]  = self.Qgut_D[-1]
+        final_x0["Qsto1_S_0"] = self.Qsto1_S[-1]
+        final_x0["Qsto2_S_0"] = self.Qsto2_S[-1]
+        final_x0["Qgut_S_0"]  = self.Qgut_S[-1]
+        final_x0["Qsto1_H_0"] = self.Qsto1_H[-1]
+        final_x0["Qsto2_H_0"] = self.Qsto2_H[-1]
+        final_x0["Qgut_H_0"]  = self.Qgut_H[-1]
+        return final_x0
 
-    This function is defined outside the ``@jitclass_``-decorated class body so
-    that Numba never tries to compile it (it must accept a plain Python
-    ``MultiMealT1DData`` object).  All spec'd model attributes and methods are
-    accessible from Python on a compiled jitclass instance.
+    def get_theta(self):
+        """Return the current model parameters as a Numba typed dict.
 
-    Args:
-        x0: Numba typed dict of initial conditions taken from the end of the
-            previous simulation (keys match ``MultiMealT1DModel`` attribute
-            names, e.g. ``"G0"``, ``"Isc10"``, ``"Qsto1_B_0"``).
-        previous_theta: Plain Python dict of the previous day's estimated
-            parameters.  Keys used: ``'kempt'``, ``'kabs_B'``, ``'kabs_L'``,
-            ``'kabs_D'``, ``'kabs_S'``, ``'kabs_H'``, ``'f'``, ``'kd'``,
-            ``'ka2'``.  Missing keys fall back to population defaults.
+        Packs all parameters set by :meth:`_reset_theta` into a typed dict
+        suitable for passing as ``theta0`` to a subsequent ``reset()`` call.
 
-    Returns:
-        Callable[(model, data) -> None]: ready to pass as the ``x0_setup``
-        argument of :meth:`ReplayBG.twin`.
-    """
-    def setup(model, data):
-        pt = previous_theta or {}
+        Returns:
+            Numba typed dict[unicode, float64] with keys matching the
+            ``unknown_parameters_prior`` naming convention.
+        """
+        theta = Dict.empty(key_type=types.unicode_type, value_type=float64)
+        theta["f"]      = self.f
+        theta["VG"]     = self.VG
+        theta["VI"]     = self.VI
+        theta["alpha"]  = np.float64(self.alpha)
+        theta["SI_B"]   = self.SI_B
+        theta["SI_L"]   = self.SI_L
+        theta["SI_D"]   = self.SI_D
+        theta["SG"]     = self.SG
+        theta["Gb"]     = self.Gb
+        theta["p2"]     = self.p2
+        theta["r1"]     = self.r1
+        theta["r2"]     = self.r2
+        theta["ka2"]    = self.ka2
+        theta["kd"]     = self.kd
+        theta["ke"]     = self.ke
+        theta["tau"]    = np.float64(self.tau)
+        theta["kabs_B"] = self.kabs_B
+        theta["kabs_L"] = self.kabs_L
+        theta["kabs_D"] = self.kabs_D
+        theta["kabs_S"] = self.kabs_S
+        theta["kabs_H"] = self.kabs_H
+        theta["kempt"]  = self.kempt
+        theta["beta_B"] = np.float64(self.beta_B)
+        theta["beta_L"] = np.float64(self.beta_L)
+        theta["beta_D"] = np.float64(self.beta_D)
+        theta["beta_S"] = np.float64(self.beta_S)
+        last_h = ((int(self.t_start) + int(self.tsteps) - 1) // 60) % 24
+        if last_h < 4 or last_h >= 17:
+            theta["SI_last"] = self.SI_D
+        elif 4 <= last_h < 11:
+            theta["SI_last"] = self.SI_B
+        else:
+            theta["SI_last"] = self.SI_L
+        return theta
 
-        kempt  = pt.get('kempt',  0.18)
-        kabs_B = pt.get('kabs_B', 0.012)
-        kabs_L = pt.get('kabs_L', 0.012)
-        kabs_D = pt.get('kabs_D', 0.012)
-        kabs_S = pt.get('kabs_S', 0.012)
-        kabs_H = pt.get('kabs_H', 0.012)
-        f      = pt.get('f',      0.9)
+
+    def _override_stomach(self):
+        """
+        """
+        x0 = self.x0
 
         # Free Backward-Euler evolution of meal gut compartments (no new meal input).
         # Layout: [Qsto1_B, Qsto2_B, Qgut_B, Qsto1_L, ..., Qgut_H]
-        xk = [
-            float(x0.get("Qsto1_B_0", 0.0)), float(x0.get("Qsto2_B_0", 0.0)), float(x0.get("Qgut_B_0", 0.0)),
-            float(x0.get("Qsto1_L_0", 0.0)), float(x0.get("Qsto2_L_0", 0.0)), float(x0.get("Qgut_L_0", 0.0)),
-            float(x0.get("Qsto1_D_0", 0.0)), float(x0.get("Qsto2_D_0", 0.0)), float(x0.get("Qgut_D_0", 0.0)),
-            float(x0.get("Qsto1_S_0", 0.0)), float(x0.get("Qsto2_S_0", 0.0)), float(x0.get("Qgut_S_0", 0.0)),
-            float(x0.get("Qsto1_H_0", 0.0)), float(x0.get("Qsto2_H_0", 0.0)), float(x0.get("Qgut_H_0", 0.0)),
-        ]
-        previous_Ra = np.zeros(data.tsteps)
-        for k in range(data.tsteps):
-            xk[0]  = xk[0]  / (1 + kempt)
-            xk[1]  = (xk[1]  + kempt * xk[0])  / (1 + kempt)
-            xk[2]  = (xk[2]  + kempt * xk[1])  / (1 + kabs_B)
-            xk[3]  = xk[3]  / (1 + kempt)
-            xk[4]  = (xk[4]  + kempt * xk[3])  / (1 + kempt)
-            xk[5]  = (xk[5]  + kempt * xk[4])  / (1 + kabs_L)
-            xk[6]  = xk[6]  / (1 + kempt)
-            xk[7]  = (xk[7]  + kempt * xk[6])  / (1 + kempt)
-            xk[8]  = (xk[8]  + kempt * xk[7])  / (1 + kabs_D)
-            xk[9]  = xk[9]  / (1 + kempt)
-            xk[10] = (xk[10] + kempt * xk[9])  / (1 + kempt)
-            xk[11] = (xk[11] + kempt * xk[10]) / (1 + kabs_S)
-            xk[12] = xk[12] / (1 + kempt)
-            xk[13] = (xk[13] + kempt * xk[12]) / (1 + kempt)
-            xk[14] = (xk[14] + kempt * xk[13]) / (1 + kabs_H)
-            previous_Ra[k] = f * (
-                kabs_B * xk[2]  + kabs_L * xk[5]  + kabs_D * xk[8] +
-                kabs_S * xk[11] + kabs_H * xk[14]
+        xk = np.zeros(15)
+        xk[0]  = x0["Qsto1_B_0"] if "Qsto1_B_0" in x0 else np.float64(0.0)
+        xk[1]  = x0["Qsto2_B_0"] if "Qsto2_B_0" in x0 else np.float64(0.0)
+        xk[2]  = x0["Qgut_B_0"]  if "Qgut_B_0"  in x0 else np.float64(0.0)
+        xk[3]  = x0["Qsto1_L_0"] if "Qsto1_L_0" in x0 else np.float64(0.0)
+        xk[4]  = x0["Qsto2_L_0"] if "Qsto2_L_0" in x0 else np.float64(0.0)
+        xk[5]  = x0["Qgut_L_0"]  if "Qgut_L_0"  in x0 else np.float64(0.0)
+        xk[6]  = x0["Qsto1_D_0"] if "Qsto1_D_0" in x0 else np.float64(0.0)
+        xk[7]  = x0["Qsto2_D_0"] if "Qsto2_D_0" in x0 else np.float64(0.0)
+        xk[8]  = x0["Qgut_D_0"]  if "Qgut_D_0"  in x0 else np.float64(0.0)
+        xk[9]  = x0["Qsto1_S_0"] if "Qsto1_S_0" in x0 else np.float64(0.0)
+        xk[10] = x0["Qsto2_S_0"] if "Qsto2_S_0" in x0 else np.float64(0.0)
+        xk[11] = x0["Qgut_S_0"]  if "Qgut_S_0"  in x0 else np.float64(0.0)
+        xk[12] = x0["Qsto1_H_0"] if "Qsto1_H_0" in x0 else np.float64(0.0)
+        xk[13] = x0["Qsto2_H_0"] if "Qsto2_H_0" in x0 else np.float64(0.0)
+        xk[14] = x0["Qgut_H_0"]  if "Qgut_H_0"  in x0 else np.float64(0.0)
+        previous_ra = np.zeros(self.tsteps)
+        for k in range(self.tsteps):
+            xk[0]  = xk[0]  / (1 + self.theta_prev["kempt"])
+            xk[1]  = (xk[1]  + self.theta_prev["kempt"] * xk[0])  / (1 + self.theta_prev["kempt"])
+            xk[2]  = (xk[2]  + self.theta_prev["kempt"] * xk[1])  / (1 + self.theta_prev["kabs_B"])
+            xk[3]  = xk[3]  / (1 + self.theta_prev["kempt"])
+            xk[4]  = (xk[4]  + self.theta_prev["kempt"] * xk[3])  / (1 + self.theta_prev["kempt"])
+            xk[5]  = (xk[5]  + self.theta_prev["kempt"] * xk[4])  / (1 + self.theta_prev["kabs_L"])
+            xk[6]  = xk[6]  / (1 + self.theta_prev["kempt"])
+            xk[7]  = (xk[7]  + self.theta_prev["kempt"] * xk[6])  / (1 + self.theta_prev["kempt"])
+            xk[8]  = (xk[8]  + self.theta_prev["kempt"] * xk[7])  / (1 + self.theta_prev["kabs_D"])
+            xk[9]  = xk[9]  / (1 + self.theta_prev["kempt"])
+            xk[10] = (xk[10] + self.theta_prev["kempt"] * xk[9])  / (1 + self.theta_prev["kempt"])
+            xk[11] = (xk[11] + self.theta_prev["kempt"] * xk[10]) / (1 + self.theta_prev["kabs_S"])
+            xk[12] = xk[12] / (1 + self.theta_prev["kempt"])
+            xk[13] = (xk[13] + self.theta_prev["kempt"] * xk[12]) / (1 + self.theta_prev["kempt"])
+            xk[14] = (xk[14] + self.theta_prev["kempt"] * xk[13]) / (1 + self.theta_prev["kabs_H"])
+            previous_ra[k] = self.theta_prev["f"] * (
+                self.theta_prev["kabs_B"] * xk[2]  + self.theta_prev["kabs_L"] * xk[5]  + self.theta_prev["kabs_D"] * xk[8] +
+                self.theta_prev["kabs_S"] * xk[11] + self.theta_prev["kabs_H"] * xk[14]
             )
 
-        # Inject carry-over Ra into data (data.u channel 8 maps to forcing_ra).
-        data.forcing_ra = previous_Ra
-        data.u[:, 8]    = previous_Ra
+        # set previous_ra.
+        self.previous_ra = previous_ra
 
         # Reset meal compartments in x0 — carry-over is now handled via forcing_ra.
-        for key in [
-            "Qsto1_B_0", "Qsto2_B_0", "Qgut_B_0",
-            "Qsto1_L_0", "Qsto2_L_0", "Qgut_L_0",
-            "Qsto1_D_0", "Qsto2_D_0", "Qgut_D_0",
-            "Qsto1_S_0", "Qsto2_S_0", "Qgut_S_0",
-            "Qsto1_H_0", "Qsto2_H_0", "Qgut_H_0",
-        ]:
-            x0[key] = np.float64(0.0)
+        self.x0["Qsto1_B_0"] = np.float64(0.0)
+        self.x0["Qsto2_B_0"] = np.float64(0.0)
+        self.x0["Qgut_B_0"]  = np.float64(0.0)
+        self.x0["Qsto1_L_0"] = np.float64(0.0)
+        self.x0["Qsto2_L_0"] = np.float64(0.0)
+        self.x0["Qgut_L_0"]  = np.float64(0.0)
+        self.x0["Qsto1_D_0"] = np.float64(0.0)
+        self.x0["Qsto2_D_0"] = np.float64(0.0)
+        self.x0["Qgut_D_0"]  = np.float64(0.0)
+        self.x0["Qsto1_S_0"] = np.float64(0.0)
+        self.x0["Qsto2_S_0"] = np.float64(0.0)
+        self.x0["Qgut_S_0"]  = np.float64(0.0)
+        self.x0["Qsto1_H_0"] = np.float64(0.0)
+        self.x0["Qsto2_H_0"] = np.float64(0.0)
+        self.x0["Qgut_H_0"]  = np.float64(0.0)
 
-        # Store previous-day insulin params so reset() can scale Isc1/Isc2 and X.
-        model._kd_prev  = np.float64(pt.get('kd',  0.026))
-        model._ka2_prev = np.float64(pt.get('ka2', 0.014))
-        model._VI_prev = np.float64(pt.get('VI', 0.135))
-
-        # SI active during the last minute of the previous segment is SI at
-        # hour (t_start - 1) % 24, using the time-of-day windows from step().
-        h_last = ((int(model.t_start) - 1) // 60) % 24
-        vg_prev = pt.get('VG', 1.45)
-        si_default = 10.35e-4 / vg_prev
-        if h_last < 4 or h_last >= 17:
-            model._SI_last_prev = np.float64(pt.get('SI_D', si_default))
-        elif h_last < 11:
-            model._SI_last_prev = np.float64(pt.get('SI_B', si_default))
-        else:
-            model._SI_last_prev = np.float64(pt.get('SI_L', si_default))
-
-        # Apply updated x0 and re-initialise state arrays, preserving fitted theta.
-        model.x0 = x0
-        model.reset(model.theta0)
-
-    return setup
-
-
-MultiMealT1DModel.setup_x0 = staticmethod(_setup_x0)
-
-
-def _extract_final_x0(model):
-    """Return the final state of *model* as a typed dict suitable for ``setup_x0``.
-
-    Reads the last time-step of every state array and packs the values into a
-    plain Python dict, then converts it to a Numba-typed dict via
-    ``to_typed_f32_dict``.  The returned dict can be passed directly as the
-    ``x0`` argument of ``MultiMealT1DModel.setup_x0``.
-
-    Args:
-        model: A ``MultiMealT1DModel`` instance whose ``step()`` loop has
-            already been run to completion.
-
-    Returns:
-        Numba typed dict[str, float64] with keys matching the ``x0`` contract
-        expected by ``_setup_x0``.
-    """
-
-
-    state = {
-        "G0":        float(model.G[-1]),
-        "X0":        float(model.X[-1]),
-        "IG0":       float(model.IG[-1]),
-        "Isc10":     float(model.Isc1[-1]),
-        "Isc20":     float(model.Isc2[-1]),
-        "Ip0":       float(model.Ip[-1]),
-        "Qsto1_B_0": float(model.Qsto1_B[-1]),
-        "Qsto2_B_0": float(model.Qsto2_B[-1]),
-        "Qgut_B_0":  float(model.Qgut_B[-1]),
-        "Qsto1_L_0": float(model.Qsto1_L[-1]),
-        "Qsto2_L_0": float(model.Qsto2_L[-1]),
-        "Qgut_L_0":  float(model.Qgut_L[-1]),
-        "Qsto1_D_0": float(model.Qsto1_D[-1]),
-        "Qsto2_D_0": float(model.Qsto2_D[-1]),
-        "Qgut_D_0":  float(model.Qgut_D[-1]),
-        "Qsto1_S_0": float(model.Qsto1_S[-1]),
-        "Qsto2_S_0": float(model.Qsto2_S[-1]),
-        "Qgut_S_0":  float(model.Qgut_S[-1]),
-        "Qsto1_H_0": float(model.Qsto1_H[-1]),
-        "Qsto2_H_0": float(model.Qsto2_H[-1]),
-        "Qgut_H_0":  float(model.Qgut_H[-1]),
-    }
-    return to_typed_f32_dict(state)
-
-MultiMealT1DModel.extract_final_x0 = staticmethod(_extract_final_x0)

@@ -21,6 +21,7 @@ class Twinner():
                  parallelize: bool = True,
                  n_jobs: int | None = None,
                  n_starts: int = 64,
+                 log_history: bool = False
     ):
         """Initialize a ``Twinner`` instance.
         """
@@ -28,11 +29,13 @@ class Twinner():
         self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
 
-        self.history = dict()
-        self.history['theta'] = []
-        self.history['log_prior'] = []
-        self.history['log_likelihood'] = []
-        self.history['log_posterior'] = []
+        self.log_history = log_history
+        if self.log_history:
+            self.history = dict()
+            self.history['theta'] = []
+            self.history['log_prior'] = []
+            self.history['log_likelihood'] = []
+            self.history['log_posterior'] = []
 
     def twin(self, model : Any, rbg_data, unknown_parameters_prior) -> dict:
         """Run twinning for a model.
@@ -59,7 +62,7 @@ class Twinner():
                 results = list(tqdm(
                     pool.imap(_run_optimization, start_guesses),
                     total=self.n_starts,
-                    desc='Twinning'
+                    desc='Twinning using MAP'
                 ))
         else:
             # Run the optimization sequentially
@@ -129,10 +132,20 @@ class Twinner():
         # Subsample the output to match the sampling rate of the data
         out = out[0::rbg_data.yts]
 
+        # TODO: enable the choice of multiple ll shapes
+        # Two-term noise model: σ² = σ_add² + (cv·|ŷ|)²
+        #sigma_add = 5.0          # mg/dL, literature default
+        #cv        = 0.05         # 5%
+        #sdn = np.sqrt(sigma_add**2 + (cv * np.abs(out[rbg_data.y_idxs]))**2)
+        #residuals = out[rbg_data.y_idxs] - rbg_data.y[rbg_data.y_idxs]
+
         # Calculate the log-likelihood with a Gaussian error model (constant coefficient of variation)
         cv = 0.05  # constant coefficient of variation (5%) #TODO: make this a parameter
         residuals = out[rbg_data.y_idxs] - rbg_data.y[rbg_data.y_idxs]
         sdn = cv * np.abs(out[rbg_data.y_idxs])
+        subsampling = 6 #TODO: decide where to evaluate ll (now every 30 minutes but maybe we can do something smarter)
+        sdn = sdn[0::subsampling]
+        residuals = residuals[0::subsampling]
         return -0.5 * np.sum((residuals / sdn) ** 2)
 
     def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
@@ -152,10 +165,11 @@ class Twinner():
         log_prior, log_likelihood, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
 
         # log the history
-        self.history['theta'].append(theta)
-        self.history['log_prior'].append(log_prior)
-        self.history['log_likelihood'].append(log_likelihood)
-        self.history['log_posterior'].append(log_post)
+        if self.log_history:
+            self.history['theta'].append(theta)
+            self.history['log_prior'].append(log_prior)
+            self.history['log_likelihood'].append(log_likelihood)
+            self.history['log_posterior'].append(log_post)
 
         return -log_post
 
@@ -209,17 +223,14 @@ def _run_optimization(args):
     # Get the worker arguments
     neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data = _worker_args
 
-
     # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        bounds = [(v['min'], v['max']) for v in unknown_parameters_prior.values()]
-        result = minimize(neg_log_posterior_fn, start_guess, method='trust-constr',
-                          bounds=bounds,
+        result = minimize(neg_log_posterior_fn, start_guess, method='Powell',
                           args=(model, rbg_data, unknown_parameters_prior,),
                           options={
                               'maxiter': 100000,
-                              #'maxfev': 100000,
-                              'disp': True
+                              'maxfev': 100000,
+                              'disp': False,
                           })
     return result

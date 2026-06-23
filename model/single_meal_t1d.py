@@ -6,6 +6,7 @@ from numba import types
 from environment.config import jitclass_
 
 theta0_type = types.DictType(types.unicode_type, float64)
+theta_prev_type = types.DictType(types.unicode_type, float64)
 x0_type = types.DictType(types.unicode_type, float64)
 JITCLASS_SPEC = [
     ("_kd_prev", float64),
@@ -48,54 +49,18 @@ JITCLASS_SPEC = [
     ("Ipb", float64),
     ("u2ss", float64),
     ("theta0", theta0_type),
+    ("theta_prev", theta_prev_type),
     ("x0", x0_type),
     ("tsteps", int16),
     ("n_u", int16),
     ("u", float64[:,:]),
+    ("previous_ra", float64[:]),
 ]
 
 
 @jitclass_(JITCLASS_SPEC)
 class SingleMealT1DModel:
     """Physiological model of glucose-insulin dynamics for a type 1 diabetic patient with a single meal.
-
-    Insulin pharmacokinetics follow a two-compartment subcutaneous absorption model.
-    Glucose risk is captured via a non-symmetric risk function that penalises
-    hypoglycaemia more than hyperglycaemia.
-
-    State variables (all stored as arrays indexed by minute):
-        G:        Plasma glucose concentration (mg/dL).
-        X:        Remote insulin action (1/min).
-        IG:       Interstitial glucose concentration (mg/dL).
-        Qsto1:  Carbohydrate in the stomach solid phase (mg).
-        Qsto2:  Carbohydrate in the stomach liquid phase (mg).
-        Qgut:   Carbohydrate in the intestine (mg).
-        Isc1:     Subcutaneous insulin in compartment 1 (pmol/kg).
-        Isc2:     Subcutaneous insulin in compartment 2 (pmol/kg).
-        Ip:       Plasma insulin (pmol/kg).
-
-    Attributes:
-        u2ss: Steady-state basal insulin infusion rate (pmol/kg/min).
-        tsteps: Length of the simulation in minutes.
-        n_u: Number of input channels (3: 1 meal, 2 insulin).
-        Gb: Basal plasma glucose concentration (mg/dL).
-        SG: Glucose effectiveness (1/min).
-        SI: Insulin sensitivity (dL/kg/pmol/min).
-        p2: Rate constant of the remote insulin compartment (1/min).
-        r1: Risk function scaling parameter.
-        r2: Risk function shape parameter.
-        ka2: Absorption rate from subcutaneous compartment 2 to plasma (1/min).
-        kd: Transfer rate from subcutaneous compartment 1 to 2 (1/min).
-        ke: Elimination rate of plasma insulin (1/min).
-        tau: Insulin absorption delay (minutes, integer).
-        kempt: Gastric emptying rate constant shared across all meal slots (1/min).
-        kabs: Intestinal absorption rate (1/min).
-        beta: Meal announcement delay (minutes, integer).
-        f: Carbohydrate bioavailability fraction (dimensionless).
-        VG: Glucose distribution volume (dL/kg).
-        VI: Insulin distribution volume (L/kg).
-        alpha: Time constant of the interstitial glucose filter (minutes, integer).
-        Ipb: Basal plasma insulin concentration (pmol/kg).
     """
 
     def __init__(self,
@@ -103,51 +68,55 @@ class SingleMealT1DModel:
                  theta0=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  x0=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  tsteps=1440,
+                 theta_prev=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  ):
         """Initialize the model and allocate state arrays.
-
-        Args:
-            u2ss: Steady-state basal insulin infusion rate (pmol/kg/min). Used
-                to compute the basal plasma insulin ``Ipb`` and the default
-                initial conditions for the insulin compartments.
-            theta0: Optional dictionary of named parameter overrides. Any key
-                not present falls back to the physiological default defined in
-                ``reset()``.
-            x0: Optional dictionary of named initial-condition overrides. Any
-                key not present falls back to the steady-state default.
-            tsteps: Length of the simulation in minutes. Determines the size of
-                all state arrays.
-
-        Returns:
-            None
         """
-        self.u2ss = np.float64(u2ss)
-        self._kd_prev = np.float64(0.026)
-        self._ka2_prev = np.float64(0.014)
-        self.x0 = x0
-        self.tsteps = tsteps
-        self.n_u = 5
-        self.reset(theta0)
 
+        # Previous "segment" parameters (needed to scale initial conditions if x0 is provided)
+        #self._kd_prev  = np.float64(0.026)
+        #self._ka2_prev = np.float64(0.014)
+
+        # Initial values of the model parameters (just a subset) and states
+        self.theta0 = theta0
+        self.x0 = x0
+        self.tsteps = np.int16(tsteps)
+
+        # Number of inputs
+        self.n_u = np.int16(3)
+
+        # Steady-state basal insulin (u2ss)
+        self.u2ss = np.float64(u2ss)
+
+        # Set previous "segment" parameters (needed to scale initial conditions if x0 is provided)
+        self.theta_prev = theta_prev
+
+        # Overwrite x0 of stomach before resetting the first time
+        if len(self.theta_prev) > 0:
+            self._override_stomach()
+
+        # Launch reset() to initialise state arrays and model parameters
+        self.reset(theta0)
 
     def reset(self,
               theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
               ):
-        """Reset all model parameters and re-initialise state arrays.
-
-        Parameters are loaded from ``theta0`` when present; otherwise
-        population-average defaults are used. Initial conditions are loaded
-        from ``self.x0`` when present; otherwise steady-state values derived
-        from ``u2ss`` are used. All state arrays are re-allocated and set to
-        their initial conditions.
-
-        Args:
-            theta0: Dictionary of named parameter values to apply. Keys absent
-                from the dictionary fall back to physiological defaults.
-
-        Returns:
-            None
+        """Resets all model parameters and re-initialise state arrays.
+        Parameters are set to those provided in theta0, or to default values if not provided.
         """
+
+        # Reset parameters first
+        self._reset_theta(theta0)
+
+        # Reset state initial conditions
+        self._reset_x0()
+
+        # Reset inputs
+        self._reset_u()
+
+    def _reset_theta(self,
+              theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
+              ):
         # --- Structural / volume parameters ---
         self.f = theta0["f"] if "f" in theta0 else np.float64(0.9)
         self.VG = theta0["VG"] if "VG" in theta0 else np.float64(1.45)
@@ -174,21 +143,51 @@ class SingleMealT1DModel:
         # tau: integer delay (minutes) applied to the subcutaneous insulin input
         self.tau = np.int16(theta0["tau"]) if "tau" in theta0 else np.int16(8)
 
-        # --- Meal gut-absorption rates ---
+        # --- Meal gut-absorption rate ---
         self.kabs = theta0["kabs"] if "kabs" in theta0 else np.float64(0.012)
-        # Shared gastric emptying rate constant across all meal slots
+        # Shared gastric emptying rate constant
         self.kempt = theta0["kempt"] if "kempt" in theta0 else np.float64(0.18)
 
-        # --- Meal announcement delays (integer minutes) ---
+        # --- Meal announcement delay (integer minutes) ---
         self.beta = np.int16(theta0["beta"]) if "beta" in theta0 else np.int16(0)
 
+    def _reset_x0(self):
+
         # --- Initial conditions (fall back to steady state if not provided) ---
+
+        # Glucose compartments
         self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float64(self.Gb)
-        self._X0 = self.x0["X0"] if "X0" in self.x0 else np.float64(0)
+        self.G = np.empty((self.tsteps,), dtype=np.float64)
+        self.G[0] = self._G0
+
+        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else np.float64(self.Gb)
+        self.IG = np.empty((self.tsteps,), dtype=np.float64)
+        self.IG[0] = self._IG0
+
         # Gut compartments start empty (no meal in progress at t=0)
         self._Qsto1_0 = self.x0["Qsto1_0"] if "Qsto1_0" in self.x0 else np.float64(0)
+        self.Qsto1 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1[0] = self._Qsto1_0
         self._Qsto2_0 = self.x0["Qsto2_0"] if "Qsto2_0" in self.x0 else np.float64(0)
+        self.Qsto2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2[0] = self._Qsto2_0
         self._Qgut_0 = self.x0["Qgut_0"] if "Qgut_0" in self.x0 else np.float64(0)
+        self.Qgut = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut[0] = self._Qgut_0
+
+        # Insulin action
+
+        # X = (SI/VI)*(Ip - Ipb): when SI or VI change across segments, X0 must be
+        # rescaled by the ratio of (SI/VI) for the current segment to
+        # (SI/VI) for the previous segment.
+        if "X0" in self.x0 and len(self.theta_prev) > 0:
+            self._X0 = (self.SI / self.VI) / (self.theta_prev["SI"] / self.theta_prev["VI"]) * self.x0["X0"]
+        else:
+            self._X0 = np.float64(0)
+        self.X = np.empty((self.tsteps,), dtype=np.float64)
+        self.X[0] = self._X0
+
+        # Subcutaneous insulin absorption
 
         # Insulin compartments start at the basal steady state derived from u2ss.
         # When x0 carries values from the previous day, they are scaled by the ratio of
@@ -199,74 +198,40 @@ class SingleMealT1DModel:
         ki2 = self.kd / self.ka2 * ki1
         self.Ipb = self.ka2 / self.ke * ki2  # basal plasma insulin
 
-        self._Isc10 = self.x0["Isc10"] if "Isc10" in self.x0 else np.float64(ki1)
-        self._Isc20 = self.x0["Isc20"] if "Isc20" in self.x0 else np.float64(ki2)
-        ki1_prev = self.u2ss / self._kd_prev
-        ki2_prev = self._kd_prev / self._ka2_prev * ki1_prev
+        if len(self.theta_prev) > 0:
+            ki1_prev = self.u2ss / self.theta_prev["kd"]
+            ki2_prev = self.theta_prev["kd"] / self.theta_prev["ka2"] * ki1_prev
 
-        if "Isc10" in self.x0:
+        if "Isc10" in self.x0 and len(self.theta_prev) > 0:
             self._Isc10 = ki1 / ki1_prev * self.x0["Isc10"]
         else:
             self._Isc10 = ki1
-        if "Isc20" in self.x0:
+        self.Isc1 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Isc1[0] = self._Isc10
+
+        if "Isc20" in self.x0 and len(self.theta_prev) > 0:
             self._Isc20 = ki2 / ki2_prev * self.x0["Isc20"]
         else:
             self._Isc20 = ki2
-        # Ipb = u2ss/ke regardless of kd/ka2 — no scaling needed
-        self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float64(self.Ipb)
-        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else self.Gb
 
-        # --- Allocate state arrays and set t=0 values ---
-        self.G = np.empty((self.tsteps,), dtype=np.float64)
-        self.G[0] = self._G0
-        self.X = np.empty((self.tsteps,), dtype=np.float64)
-        self.X[0] = self._X0
-
-        self.Qsto1 = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto1[0] = self._Qsto1_0
-        self.Qsto2 = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qsto2[0] = self._Qsto2_0
-        self.Qgut = np.empty((self.tsteps,), dtype=np.float64)
-        self.Qgut[0] = self._Qgut_0
-
-        self.Isc1 = np.empty((self.tsteps,), dtype=np.float64)
-        self.Isc1[0] = self._Isc10
         self.Isc2 = np.empty((self.tsteps,), dtype=np.float64)
         self.Isc2[0] = self._Isc20
+
+        # Ipb = u2ss/ke regardless of kd/ka2 — no scaling needed
+        self._Ip0 = self.x0["Ip0"] if "Ip0" in self.x0 else np.float64(self.Ipb)
         self.Ip = np.empty((self.tsteps,), dtype=np.float64)
         self.Ip[0] = self._Ip0
-        self.IG = np.empty((self.tsteps,), dtype=np.float64)
-        self.IG[0] = self._IG0
 
+    def _reset_u(self):
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
         self.u[1, 0] = self.u2ss
         self.u[2, 0] = 0.0  # no bolus at t=0
+        if len(self.theta_prev) == 0:
+            self.previous_ra = np.zeros(self.tsteps)
 
     def step(self, u: float64[:], t: float64):
         """Advance the model by one minute using Backward Euler integration.
-
-        This is the primary integration method used during twinning and replay.
-        The full input history is stored in ``self.u`` to support integer-minute
-        meal announcement delays (``beta_*``) and insulin absorption delay
-        (``tau``). The Backward Euler discretisation is applied sequentially
-        along the physiological cascade (Gauss-Seidel order), which is
-        equivalent to a simultaneous implicit solve for this DAG-structured
-        system. The nonlinear risk term is treated semi-implicitly — its
-        coefficient is evaluated at ``G[t-1]`` to avoid a nonlinear solve while
-        preserving first-order accuracy.
-
-        Args:
-            u: Input vector of length ``n_u`` containing:
-                - u[0]: Carbohydrate rate (mg/kg/min).
-                - u[1]: Basal insulin infusion rate (pmol/kg/min).
-                - u[2]: Bolus insulin rate (pmol/kg/min).
-                - u[3]: Glucose infusion rate (mg/kg/min) — forcing input added directly to the plasma glucose compartment.
-                - u[4]: Extra plasma insulin (pmol/kg) — forcing input added inside the ``(Ip[t] - Ipb)`` drive of the remote insulin compartment X.
-            t: Current simulation time step (integer minute index, >= 1).
-
-        Returns:
-            None
         """
         # Store current inputs in the history buffer so delayed values can be
         # retrieved at this or future timesteps via index arithmetic.
@@ -277,10 +242,6 @@ class SingleMealT1DModel:
         u_m = self.u[0, t - self.beta] if (t - self.beta) >= 0 else 0
         self.u[1, t] = u[1]
         self.u[2, t] = u[2]
-        self.u[3, t] = u[3]
-        forcing_ra = self.u[3, t]
-        self.u[4, t] = u[4]
-        forcing_ip = self.u[4, t]
         # Apply insulin absorption delay tau: use the insulin input from tau
         # minutes ago. Before tau minutes have elapsed, fall back to u2ss so
         # the plasma insulin chain starts at its basal steady state.
@@ -309,10 +270,8 @@ class SingleMealT1DModel:
         k2 = 1.0 / (1.0 + self.kempt)   # Qsto2: -kempt * Qsto2
         kd_fac = 1.0 / (1.0 + self.kd)  # Isc1:  -kd * Isc1
 
-        # --- Gut absorption chains (Backward Euler, Gauss-Seidel order) ---
-        # Each meal slot: solid stomach (Qsto1) → liquid stomach (Qsto2) → intestine (Qgut).
-        # Each compartment uses the current-step value of its upstream input,
-        # which is valid because the system is a strict cascade (no feedback).
+        # --- Gut absorption chain (Backward Euler, Gauss-Seidel order) ---
+        # Solid stomach (Qsto1) → liquid stomach (Qsto2) → intestine (Qgut).
         self.Qsto1[t] = (self.Qsto1[t-1] + u_m) * k1
         self.Qsto2[t] = (self.Qsto2[t-1] + self.kempt * self.Qsto1[t]) * k2
         self.Qgut[t] = (self.Qgut[t-1] + self.kempt * self.Qsto2[t]) / (1 + self.kabs)
@@ -325,10 +284,10 @@ class SingleMealT1DModel:
 
         # --- Insulin action and glucose (Backward Euler) ---
         # X depends on Ip[t] (just computed above)
-        self.X[t] = (self.X[t-1] + self.p2 * (self.SI / self.VI) * (self.Ip[t] - self.Ipb + forcing_ip)) / (1 + self.p2)
-        # G depends on X[t] and all Qgut[t] (just computed). The risk coefficient
+        self.X[t] = (self.X[t-1] + self.p2 * (self.SI / self.VI) * (self.Ip[t] - self.Ipb)) / (1 + self.p2)
+        # G depends on X[t] and Qgut[t] (just computed). The risk coefficient
         # is frozen at G[t-1] (semi-implicit) to keep the update linear in G[t].
-        self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * self.kabs * self.Qgut[t] / self.VG + forcing_ra / self.VG) / (1 + self.SG + risk * self.X[t])
+        self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * self.kabs * self.Qgut[t] / self.VG + self.previous_ra[t-1] / self.VG) / (1 + self.SG + risk * self.X[t])
         # Interstitial glucose: first-order low-pass filter on plasma glucose
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 
@@ -346,109 +305,81 @@ class SingleMealT1DModel:
         """
         return self.IG[t]
 
-def _setup_x0(x0, previous_theta=None):
-    """Factory returning a ``(model, data) -> None`` callable for ``ReplayBG.twin(x0_setup=...)``.
+    def get_final_x0(self):
+        """Return the final state of the model as a Numba typed dict.
 
-    Computes the carry-over glucose appearance rate (``previous_Ra``) from the
-    meal gut-compartment values stored in *x0*, injects it into
-    ``data.forcing_ra`` / ``data.u[:, 3]``, resets the meal compartments in *x0*
-    to zero, and stores the previous-day insulin kinetic parameters on the model
-    so that :meth:`SingleMealT1DModel.reset` can correctly scale the ``Isc1``/
-    ``Isc2`` initial conditions on every optimizer trial.
+        Reads the last time-step of every state array and packs the values
+        into a typed dict suitable for passing as ``x0`` to a subsequent
+        segment's ``reset()`` call.
 
-    This function is defined outside the ``@jitclass_``-decorated class body so
-    that Numba never tries to compile it (it must accept a plain Python
-    ``SingleMealT1DData`` object).  All spec'd model attributes and methods are
-    accessible from Python on a compiled jitclass instance.
+        Returns:
+            Numba typed dict[unicode, float64] with keys matching the ``x0``
+            contract expected by ``reset()``.
+        """
+        final_x0 = Dict.empty(key_type=types.unicode_type, value_type=float64)
+        final_x0["G0"]      = self.G[-1]
+        final_x0["X0"]      = self.X[-1]
+        final_x0["IG0"]     = self.IG[-1]
+        final_x0["Isc10"]   = self.Isc1[-1]
+        final_x0["Isc20"]   = self.Isc2[-1]
+        final_x0["Ip0"]     = self.Ip[-1]
+        final_x0["Qsto1_0"] = self.Qsto1[-1]
+        final_x0["Qsto2_0"] = self.Qsto2[-1]
+        final_x0["Qgut_0"]  = self.Qgut[-1]
+        return final_x0
 
-    Args:
-        x0: Numba typed dict of initial conditions taken from the end of the
-            previous simulation (keys match ``SingleMealT1DModel`` attribute
-            names, e.g. ``"G0"``, ``"Isc10"``, ``"Qsto1_0"``).
-        previous_theta: Plain Python dict of the previous day's estimated
-            parameters.  Keys used: ``'kempt'``, ``'kabs'``, ``'f'``, ``'kd'``,
-            ``'ka2'``.  Missing keys fall back to population defaults.
+    def get_theta(self):
+        """Return the current model parameters as a Numba typed dict.
 
-    Returns:
-        Callable[(model, data) -> None]: ready to pass as the ``x0_setup``
-        argument of :meth:`ReplayBG.twin`.
+        Packs all parameters set by :meth:`_reset_theta` into a typed dict
+        suitable for passing as ``theta_prev`` to a subsequent segment's
+        ``__init__`` call.
 
-    Example:
-        >>> setup = SingleMealT1DModel.setup_x0(x0=day1_x0, previous_theta=theta_day1)
-        >>> theta_day2 = rbg.twin(data=rbg_data2, model=model2, ..., x0_setup=setup)
-    """
+        Returns:
+            Numba typed dict[unicode, float64] with keys matching the
+            ``unknown_parameters_prior`` naming convention.
+        """
+        theta = Dict.empty(key_type=types.unicode_type, value_type=float64)
+        theta["f"]     = self.f
+        theta["VG"]    = self.VG
+        theta["VI"]    = self.VI
+        theta["alpha"] = np.float64(self.alpha)
+        theta["SI"]    = self.SI
+        theta["SG"]    = self.SG
+        theta["Gb"]    = self.Gb
+        theta["p2"]    = self.p2
+        theta["r1"]    = self.r1
+        theta["r2"]    = self.r2
+        theta["ka2"]   = self.ka2
+        theta["kd"]    = self.kd
+        theta["ke"]    = self.ke
+        theta["tau"]   = np.float64(self.tau)
+        theta["kabs"]  = self.kabs
+        theta["kempt"] = self.kempt
+        theta["beta"]  = np.float64(self.beta)
+        return theta
 
-    def setup(model, data):
-        pt = previous_theta or {}
-
-        kempt = pt.get('kempt', 0.18)
-        kabs = pt.get('kabs', 0.012)
-        f = pt.get('f', 0.9)
+    def _override_stomach(self):
+        """
+        """
+        x0 = self.x0
 
         # Free Backward-Euler evolution of the single meal gut compartment.
-        xk = [
-            float(x0.get("Qsto1_0", 0.0)),
-            float(x0.get("Qsto2_0", 0.0)),
-            float(x0.get("Qgut_0", 0.0)),
-        ]
-        previous_Ra = np.zeros(data.tsteps)
-        for k in range(data.tsteps):
-            xk[0] = xk[0] / (1 + kempt)
-            xk[1] = (xk[1] + kempt * xk[0]) / (1 + kempt)
-            xk[2] = (xk[2] + kempt * xk[1]) / (1 + kabs)
-            previous_Ra[k] = f * kabs * xk[2]
+        xk = np.zeros(3)
+        xk[0] = x0["Qsto1_0"] if "Qsto1_0" in x0 else np.float64(0.0)
+        xk[1] = x0["Qsto2_0"] if "Qsto2_0" in x0 else np.float64(0.0)
+        xk[2] = x0["Qgut_0"]  if "Qgut_0"  in x0 else np.float64(0.0)
+        previous_ra = np.zeros(self.tsteps)
+        for k in range(self.tsteps):
+            xk[0] = xk[0] / (1 + self.theta_prev["kempt"])
+            xk[1] = (xk[1] + self.theta_prev["kempt"] * xk[0]) / (1 + self.theta_prev["kempt"])
+            xk[2] = (xk[2] + self.theta_prev["kempt"] * xk[1]) / (1 + self.theta_prev["kabs"])
+            previous_ra[k] = self.theta_prev["f"] * self.theta_prev["kabs"] * xk[2]
 
-        # Inject carry-over Ra into data (data.u channel 3 maps to forcing_ra).
-        data.forcing_ra = previous_Ra
-        data.u[:, 3] = previous_Ra
+        # set previous_ra.
+        self.previous_ra = previous_ra
 
-        # Reset meal compartments in x0 — carry-over is now handled via forcing_ra.
-        for key in ["Qsto1_0", "Qsto2_0", "Qgut_0"]:
-            x0[key] = np.float64(0.0)
-
-        # Store previous-day insulin params so reset() can scale Isc1/Isc2.
-        model._kd_prev = np.float64(pt.get('kd', 0.026))
-        model._ka2_prev = np.float64(pt.get('ka2', 0.014))
-
-        # Apply updated x0 and re-initialise state arrays.
-        model.x0 = x0
-        model.reset(Dict.empty(key_type=types.unicode_type, value_type=float64))
-
-    return setup
-
-SingleMealT1DModel.setup_x0 = staticmethod(_setup_x0)
-
-
-def _extract_final_x0(model):
-    """Return the final state of *model* as a typed dict suitable for ``setup_x0``.
-
-    Reads the last time-step of every state array and packs the values into a
-    plain Python dict, then converts it to a Numba-typed dict via
-    ``to_typed_f32_dict``.  The returned dict can be passed directly as the
-    ``x0`` argument of ``SingleMealT1DModel.setup_x0``.
-
-    Args:
-        model: A ``SingleMealT1DModel`` instance whose ``step()`` loop has
-            already been run to completion.
-
-    Returns:
-        Numba typed dict[str, float64] with keys matching the ``x0`` contract
-        expected by ``_setup_x0``.
-    """
-    from utils.numba_dicts import to_typed_f32_dict
-
-    state = {
-        "G0":      float(model.G[-1]),
-        "X0":      float(model.X[-1]),
-        "IG0":     float(model.IG[-1]),
-        "Isc10":   float(model.Isc1[-1]),
-        "Isc20":   float(model.Isc2[-1]),
-        "Ip0":     float(model.Ip[-1]),
-        "Qsto1_0": float(model.Qsto1[-1]),
-        "Qsto2_0": float(model.Qsto2[-1]),
-        "Qgut_0":  float(model.Qgut[-1]),
-    }
-    return to_typed_f32_dict(state)
-
-
-SingleMealT1DModel.extract_final_x0 = staticmethod(_extract_final_x0)
+        # Reset meal compartments in x0 — carry-over is now handled via previous_ra.
+        self.x0["Qsto1_0"] = np.float64(0.0)
+        self.x0["Qsto2_0"] = np.float64(0.0)
+        self.x0["Qgut_0"]  = np.float64(0.0)
