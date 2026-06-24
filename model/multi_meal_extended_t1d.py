@@ -27,6 +27,15 @@ JITCLASS_SPEC = [
     ("_Qsto1_H_0", float64),
     ("_Qsto2_H_0", float64),
     ("_Qgut_H_0", float64),
+    ("_Qsto1_B2_0", float64),
+    ("_Qsto2_B2_0", float64),
+    ("_Qgut_B2_0", float64),
+    ("_Qsto1_L2_0", float64),
+    ("_Qsto2_L2_0", float64),
+    ("_Qgut_L2_0", float64),
+    ("_Qsto1_S2_0", float64),
+    ("_Qsto2_S2_0", float64),
+    ("_Qgut_S2_0", float64),
     ("_Isc10", float64),
     ("_Isc20", float64),
     ("_Ip0", float64),
@@ -48,6 +57,15 @@ JITCLASS_SPEC = [
     ("Qsto1_H", float64[:]),
     ("Qsto2_H", float64[:]),
     ("Qgut_H", float64[:]),
+    ("Qsto1_B2", float64[:]),
+    ("Qsto2_B2", float64[:]),
+    ("Qgut_B2", float64[:]),
+    ("Qsto1_L2", float64[:]),
+    ("Qsto2_L2", float64[:]),
+    ("Qgut_L2", float64[:]),
+    ("Qsto1_S2", float64[:]),
+    ("Qsto2_S2", float64[:]),
+    ("Qgut_S2", float64[:]),
     ("Isc1", float64[:]),
     ("Isc2", float64[:]),
     ("Ip", float64[:]),
@@ -55,6 +73,7 @@ JITCLASS_SPEC = [
     ("SI_B", float64),
     ("SI_L", float64),
     ("SI_D", float64),
+    ("SI_B2", float64),
     ("SG", float64),
     ("Gb", float64),
     ("p2", float64),
@@ -69,10 +88,16 @@ JITCLASS_SPEC = [
     ("kabs_D", float64),
     ("kabs_S", float64),
     ("kabs_H", float64),
+    ("kabs_B2", float64),
+    ("kabs_L2", float64),
+    ("kabs_S2", float64),
     ("beta_B", int16),
     ("beta_L", int16),
     ("beta_D", int16),
     ("beta_S", int16),
+    ("beta_B2", int16),
+    ("beta_L2", int16),
+    ("beta_S2", int16),
     ("kempt", float64),
     ("f", float64),
     ("VG", float64),
@@ -92,7 +117,7 @@ JITCLASS_SPEC = [
 
 
 @jitclass_(JITCLASS_SPEC)
-class MultiMealT1DModel:
+class MultiMealExtendedT1DModel:
     """Physiological model of glucose-insulin dynamics for a type 1 diabetic patient with multiple daily meals.
     """
 
@@ -113,8 +138,8 @@ class MultiMealT1DModel:
         self.tsteps = np.int16(tsteps)
         self.t_start = np.int16(t_start)
 
-        # Number of inputs
-        self.n_u = np.int16(8)
+        # Number of inputs (8 meal channels + bolus + basal + t_hour = 11)
+        self.n_u = np.int16(11)
 
         # Steady-state basal insulin (u2ss)
         self.u2ss = u2ss
@@ -160,6 +185,7 @@ class MultiMealT1DModel:
         self.SI_B = theta0["SI_B"] if "SI_B" in theta0 else np.float64(10.35e-4 / self.VG)
         self.SI_L = theta0["SI_L"] if "SI_L" in theta0 else np.float64(10.35e-4 / self.VG)
         self.SI_D = theta0["SI_D"] if "SI_D" in theta0 else np.float64(10.35e-4 / self.VG)
+        self.SI_B2 = theta0["SI_B2"] if "SI_B2" in theta0 else np.float64(10.35e-4 / self.VG)
 
         # --- Glucose kinetics ---
         self.SG = theta0["SG"] if "SG" in theta0 else np.float64(2.5e-2)
@@ -183,6 +209,9 @@ class MultiMealT1DModel:
         self.kabs_D = theta0["kabs_D"] if "kabs_D" in theta0 else np.float64(0.012)
         self.kabs_S = theta0["kabs_S"] if "kabs_S" in theta0 else np.float64(0.012)
         self.kabs_H = theta0["kabs_H"] if "kabs_H" in theta0 else np.float64(0.012)
+        self.kabs_B2 = theta0["kabs_B2"] if "kabs_B2" in theta0 else np.float64(0.012)
+        self.kabs_L2 = theta0["kabs_L2"] if "kabs_L2" in theta0 else np.float64(0.012)
+        self.kabs_S2 = theta0["kabs_S2"] if "kabs_S2" in theta0 else np.float64(0.012)
         # Shared gastric emptying rate constant across all meal slots
         self.kempt = theta0["kempt"] if "kempt" in theta0 else np.float64(0.18)
 
@@ -191,6 +220,9 @@ class MultiMealT1DModel:
         self.beta_L = np.int16(theta0["beta_L"]) if "beta_L" in theta0 else np.int16(0)
         self.beta_D = np.int16(theta0["beta_D"]) if "beta_D" in theta0 else np.int16(0)
         self.beta_S = np.int16(theta0["beta_S"]) if "beta_S" in theta0 else np.int16(0)
+        self.beta_B2 = np.int16(theta0["beta_B2"]) if "beta_B2" in theta0 else np.int16(0)
+        self.beta_L2 = np.int16(theta0["beta_L2"]) if "beta_L2" in theta0 else np.int16(0)
+        self.beta_S2 = np.int16(theta0["beta_S2"]) if "beta_S2" in theta0 else np.int16(0)
 
     def _reset_x0(self):
 
@@ -256,6 +288,35 @@ class MultiMealT1DModel:
         self.Qgut_H = np.empty((self.tsteps,), dtype=np.float64)
         self.Qgut_H[0] = self._Qgut_H_0
 
+        self._Qsto1_B2_0 = self.x0["Qsto1_B2_0"] if "Qsto1_B2_0" in self.x0 else np.float64(0)
+        self.Qsto1_B2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_B2[0] = self._Qsto1_B2_0
+        self._Qsto2_B2_0 = self.x0["Qsto2_B2_0"] if "Qsto2_B2_0" in self.x0 else np.float64(0)
+        self.Qsto2_B2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_B2[0] = self._Qsto2_B2_0
+        self._Qgut_B2_0 = self.x0["Qgut_B2_0"] if "Qgut_B2_0" in self.x0 else np.float64(0)
+        self.Qgut_B2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_B2[0] = self._Qgut_B2_0
+
+        self._Qsto1_L2_0 = self.x0["Qsto1_L2_0"] if "Qsto1_L2_0" in self.x0 else np.float64(0)
+        self.Qsto1_L2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_L2[0] = self._Qsto1_L2_0
+        self._Qsto2_L2_0 = self.x0["Qsto2_L2_0"] if "Qsto2_L2_0" in self.x0 else np.float64(0)
+        self.Qsto2_L2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_L2[0] = self._Qsto2_L2_0
+        self._Qgut_L2_0 = self.x0["Qgut_L2_0"] if "Qgut_L2_0" in self.x0 else np.float64(0)
+        self.Qgut_L2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_L2[0] = self._Qgut_L2_0
+
+        self._Qsto1_S2_0 = self.x0["Qsto1_S2_0"] if "Qsto1_S2_0" in self.x0 else np.float64(0)
+        self.Qsto1_S2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto1_S2[0] = self._Qsto1_S2_0
+        self._Qsto2_S2_0 = self.x0["Qsto2_S2_0"] if "Qsto2_S2_0" in self.x0 else np.float64(0)
+        self.Qsto2_S2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qsto2_S2[0] = self._Qsto2_S2_0
+        self._Qgut_S2_0 = self.x0["Qgut_S2_0"] if "Qgut_S2_0" in self.x0 else np.float64(0)
+        self.Qgut_S2 = np.empty((self.tsteps,), dtype=np.float64)
+        self.Qgut_S2[0] = self._Qgut_S2_0
 
         # Insulin action
 
@@ -315,8 +376,8 @@ class MultiMealT1DModel:
     def _reset_u(self):
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
-        self.u[5, 0] = self.u2ss
-        self.u[6, 0] = 0.0  # no bolus at t=0
+        self.u[8, 0] = self.u2ss  # slot 8 = bolus in data convention, but set to u2ss
+        self.u[9, 0] = 0.0  # slot 9 = basal in data convention, but set to 0
         if len(self.theta_prev) == 0:
             self.previous_ra = np.zeros(self.tsteps)
 
@@ -341,20 +402,29 @@ class MultiMealT1DModel:
         # Hypo-treatment has no announcement delay
         u_m_h = self.u[4, t]
         self.u[5, t] = u[5]
+        u_m_b2 = self.u[5, t - self.beta_B2] if (t - self.beta_B2) >= 0 else 0
         self.u[6, t] = u[6]
+        u_m_l2 = self.u[6, t - self.beta_L2] if (t - self.beta_L2) >= 0 else 0
+        self.u[7, t] = u[7]
+        u_m_s2 = self.u[7, t - self.beta_S2] if (t - self.beta_S2) >= 0 else 0
+        self.u[8, t] = u[8]
+        self.u[9, t] = u[9]
         # Apply insulin absorption delay tau: use the insulin input from tau
         # minutes ago. Before tau minutes have elapsed, fall back to u2ss so
         # the plasma insulin chain starts at its basal steady state.
-        u_i = self.u[5, t - self.tau] + self.u[6, t - self.tau] if (t - self.tau) >= 0 else self.u2ss
-        self.u[7, t] = u[7]
-        u_h = self.u[7, t]
+        u_i = self.u[8, t - self.tau] + self.u[9, t - self.tau] if (t - self.tau) >= 0 else self.u2ss
+        self.u[10, t] = u[10]
+        u_h = self.u[10, t]
 
         # Select insulin sensitivity based on hour of day:
         # breakfast window 04:00–10:59, lunch 11:00–16:59, dinner/night otherwise
         if u_h < 4 or u_h >= 17:
             SI = self.SI_D
         elif 4 <= u_h < 11:
-            SI = self.SI_B
+            if (t + self.t_start) < 1440:
+                SI = self.SI_B
+            else:
+                SI = self.SI_B2
         else:
             SI = self.SI_L
 
@@ -405,6 +475,18 @@ class MultiMealT1DModel:
         self.Qsto2_H[t] = (self.Qsto2_H[t-1] + self.kempt * self.Qsto1_H[t]) * k2
         self.Qgut_H[t] = (self.Qgut_H[t-1] + self.kempt * self.Qsto2_H[t]) / (1 + self.kabs_H)
 
+        self.Qsto1_B2[t] = (self.Qsto1_B2[t - 1] + u_m_b2) * k1
+        self.Qsto2_B2[t] = (self.Qsto2_B2[t - 1] + self.kempt * self.Qsto1_B2[t]) * k2
+        self.Qgut_B2[t] = (self.Qgut_B2[t - 1] + self.kempt * self.Qsto2_B2[t]) / (1 + self.kabs_B2)
+
+        self.Qsto1_L2[t] = (self.Qsto1_L2[t - 1] + u_m_l2) * k1
+        self.Qsto2_L2[t] = (self.Qsto2_L2[t - 1] + self.kempt * self.Qsto1_L2[t]) * k2
+        self.Qgut_L2[t] = (self.Qgut_L2[t - 1] + self.kempt * self.Qsto2_L2[t]) / (1 + self.kabs_L2)
+
+        self.Qsto1_S2[t] = (self.Qsto1_S2[t - 1] + u_m_s2) * k1
+        self.Qsto2_S2[t] = (self.Qsto2_S2[t - 1] + self.kempt * self.Qsto1_S2[t]) * k2
+        self.Qgut_S2[t] = (self.Qgut_S2[t - 1] + self.kempt * self.Qsto2_S2[t]) / (1 + self.kabs_S2)
+
         # --- Insulin pharmacokinetic chain (Backward Euler, Gauss-Seidel order) ---
         # Subcutaneous compartment 1 → compartment 2 → plasma
         self.Isc1[t] = (self.Isc1[t-1] + u_i) * kd_fac
@@ -418,7 +500,8 @@ class MultiMealT1DModel:
         # is frozen at G[t-1] (semi-implicit) to keep the update linear in G[t].
         self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * (
                 self.kabs_B * self.Qgut_B[t] + self.kabs_L * self.Qgut_L[t] + self.kabs_D * self.Qgut_D[t] +
-                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t]) / self.VG + self.previous_ra[t-1] / self.VG) / (1 + self.SG + risk * self.X[t])
+                self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t] +
+                self.kabs_B2 * self.Qgut_B2[t] + self.kabs_L2 * self.Qgut_L2[t] + self.kabs_S2 * self.Qgut_S2[t]) / self.VG + self.previous_ra[t-1] / self.VG) / (1 + self.SG + risk * self.X[t])
         # Interstitial glucose: first-order low-pass filter on plasma glucose
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 
@@ -469,6 +552,15 @@ class MultiMealT1DModel:
         final_x0["Qsto1_H_0"] = self.Qsto1_H[-1]
         final_x0["Qsto2_H_0"] = self.Qsto2_H[-1]
         final_x0["Qgut_H_0"]  = self.Qgut_H[-1]
+        final_x0["Qsto1_B2_0"] = self.Qsto1_B2[-1]
+        final_x0["Qsto2_B2_0"] = self.Qsto2_B2[-1]
+        final_x0["Qgut_B2_0"] = self.Qgut_B2[-1]
+        final_x0["Qsto1_L2_0"] = self.Qsto1_L2[-1]
+        final_x0["Qsto2_L2_0"] = self.Qsto2_L2[-1]
+        final_x0["Qgut_L2_0"] = self.Qgut_L2[-1]
+        final_x0["Qsto1_S2_0"] = self.Qsto1_S2[-1]
+        final_x0["Qsto2_S2_0"] = self.Qsto2_S2[-1]
+        final_x0["Qgut_S2_0"] = self.Qgut_S2[-1]
         return final_x0
 
     def get_theta(self):
@@ -489,6 +581,7 @@ class MultiMealT1DModel:
         theta["SI_B"]   = self.SI_B
         theta["SI_L"]   = self.SI_L
         theta["SI_D"]   = self.SI_D
+        theta["SI_B2"] = self.SI_B2
         theta["SG"]     = self.SG
         theta["Gb"]     = self.Gb
         theta["p2"]     = self.p2
@@ -503,18 +596,18 @@ class MultiMealT1DModel:
         theta["kabs_D"] = self.kabs_D
         theta["kabs_S"] = self.kabs_S
         theta["kabs_H"] = self.kabs_H
+        theta["kabs_B2"] = self.kabs_B2
+        theta["kabs_L2"] = self.kabs_L2
+        theta["kabs_S2"] = self.kabs_S2
         theta["kempt"]  = self.kempt
         theta["beta_B"] = np.float64(self.beta_B)
         theta["beta_L"] = np.float64(self.beta_L)
         theta["beta_D"] = np.float64(self.beta_D)
         theta["beta_S"] = np.float64(self.beta_S)
-        last_h = ((int(self.t_start) + int(self.tsteps) - 1) // 60) % 24
-        if last_h < 4 or last_h >= 17:
-            theta["SI_last"] = self.SI_D
-        elif 4 <= last_h < 11:
-            theta["SI_last"] = self.SI_B
-        else:
-            theta["SI_last"] = self.SI_L
+        theta["beta_B2"] = np.float64(self.beta_B2)
+        theta["beta_L2"] = np.float64(self.beta_L2)
+        theta["beta_S2"] = np.float64(self.beta_S2)
+        theta["SI_last"] = self.SI_D # IMPORTANT: It is always the last SI value since it is extended mode (user is supposed to cut before 4 AM of the second day)
         return theta
 
 
@@ -525,7 +618,7 @@ class MultiMealT1DModel:
 
         # Free Backward-Euler evolution of meal gut compartments (no new meal input).
         # Layout: [Qsto1_B, Qsto2_B, Qgut_B, Qsto1_L, ..., Qgut_H]
-        xk = np.zeros(15)
+        xk = np.zeros(24)
         xk[0]  = x0["Qsto1_B_0"] if "Qsto1_B_0" in x0 else np.float64(0.0)
         xk[1]  = x0["Qsto2_B_0"] if "Qsto2_B_0" in x0 else np.float64(0.0)
         xk[2]  = x0["Qgut_B_0"]  if "Qgut_B_0"  in x0 else np.float64(0.0)
@@ -541,6 +634,15 @@ class MultiMealT1DModel:
         xk[12] = x0["Qsto1_H_0"] if "Qsto1_H_0" in x0 else np.float64(0.0)
         xk[13] = x0["Qsto2_H_0"] if "Qsto2_H_0" in x0 else np.float64(0.0)
         xk[14] = x0["Qgut_H_0"]  if "Qgut_H_0"  in x0 else np.float64(0.0)
+        xk[15] = x0["Qsto1_B2_0"] if "Qsto1_B2_0" in x0 else np.float64(0.0)
+        xk[16] = x0["Qsto2_B2_0"] if "Qsto2_B2_0" in x0 else np.float64(0.0)
+        xk[17] = x0["Qgut_B2_0"] if "Qgut_B2_0" in x0 else np.float64(0.0)
+        xk[18] = x0["Qsto1_L2_0"] if "Qsto1_L2_0" in x0 else np.float64(0.0)
+        xk[19] = x0["Qsto2_L2_0"] if "Qsto2_L2_0" in x0 else np.float64(0.0)
+        xk[20] = x0["Qgut_L2_0"] if "Qgut_L2_0" in x0 else np.float64(0.0)
+        xk[21] = x0["Qsto1_S2_0"] if "Qsto1_S2_0" in x0 else np.float64(0.0)
+        xk[22] = x0["Qsto2_S2_0"] if "Qsto2_S2_0" in x0 else np.float64(0.0)
+        xk[23] = x0["Qgut_S2_0"] if "Qgut_S2_0" in x0 else np.float64(0.0)
         previous_ra = np.zeros(self.tsteps)
         for k in range(self.tsteps):
             xk[0]  = xk[0]  / (1 + self.theta_prev["kempt"])
@@ -558,9 +660,19 @@ class MultiMealT1DModel:
             xk[12] = xk[12] / (1 + self.theta_prev["kempt"])
             xk[13] = (xk[13] + self.theta_prev["kempt"] * xk[12]) / (1 + self.theta_prev["kempt"])
             xk[14] = (xk[14] + self.theta_prev["kempt"] * xk[13]) / (1 + self.theta_prev["kabs_H"])
+            xk[15] = xk[15] / (1 + self.theta_prev["kempt"])
+            xk[16] = (xk[16] + self.theta_prev["kempt"] * xk[15]) / (1 + self.theta_prev["kempt"])
+            xk[17] = (xk[17] + self.theta_prev["kempt"] * xk[16]) / (1 + self.theta_prev["kabs_B2"])
+            xk[18] = xk[18] / (1 + self.theta_prev["kempt"])
+            xk[19] = (xk[19] + self.theta_prev["kempt"] * xk[18]) / (1 + self.theta_prev["kempt"])
+            xk[20] = (xk[20] + self.theta_prev["kempt"] * xk[19]) / (1 + self.theta_prev["kabs_L2"])
+            xk[21] = xk[21] / (1 + self.theta_prev["kempt"])
+            xk[22] = (xk[22] + self.theta_prev["kempt"] * xk[21]) / (1 + self.theta_prev["kempt"])
+            xk[23] = (xk[23] + self.theta_prev["kempt"] * xk[22]) / (1 + self.theta_prev["kabs_S2"])
             previous_ra[k] = self.theta_prev["f"] * (
                 self.theta_prev["kabs_B"] * xk[2]  + self.theta_prev["kabs_L"] * xk[5]  + self.theta_prev["kabs_D"] * xk[8] +
-                self.theta_prev["kabs_S"] * xk[11] + self.theta_prev["kabs_H"] * xk[14]
+                self.theta_prev["kabs_S"] * xk[11] + self.theta_prev["kabs_H"] * xk[14] + self.theta_prev["kabs_B2"] * xk[17] +
+                self.theta_prev["kabs_L2"] * xk[20] + self.theta_prev["kabs_S2"] * xk[23]
             )
 
         # set previous_ra.
@@ -582,4 +694,12 @@ class MultiMealT1DModel:
         self.x0["Qsto1_H_0"] = np.float64(0.0)
         self.x0["Qsto2_H_0"] = np.float64(0.0)
         self.x0["Qgut_H_0"]  = np.float64(0.0)
-
+        self.x0["Qsto1_B2_0"] = np.float64(0.0)
+        self.x0["Qsto2_B2_0"] = np.float64(0.0)
+        self.x0["Qgut_B2_0"] = np.float64(0.0)
+        self.x0["Qsto1_L2_0"] = np.float64(0.0)
+        self.x0["Qsto2_L2_0"] = np.float64(0.0)
+        self.x0["Qgut_L2_0"] = np.float64(0.0)
+        self.x0["Qsto1_S2_0"] = np.float64(0.0)
+        self.x0["Qsto2_S2_0"] = np.float64(0.0)
+        self.x0["Qgut_S2_0"] = np.float64(0.0)

@@ -6,7 +6,7 @@ import pandas as pd
 from environment import Environment
 
 
-class MultiMealT1DData:
+class MultiMealExtendedT1DData:
     """Prepare and store time-series data for the ReplayBG simulation pipeline.
 
     The class converts a pandas dataframe into the arrays and metadata needed by
@@ -61,9 +61,12 @@ class MultiMealT1DData:
                                   2: 'meal_D',
                                   3: 'meal_S',
                                   4: 'meal_H',
-                                  5: 'bolus',
-                                  6: 'basal',
-                                  7: 't_hour'}
+                                  5: 'meal_B2',
+                                  6: 'meal_L2',
+                                  7: 'meal_S2',
+                                  8: 'bolus',
+                                  9: 'basal',
+                                  10: 't_hour'}
         else:
             self.data_to_input = data_to_input
 
@@ -181,6 +184,10 @@ class MultiMealT1DData:
         self.meal_S = np.zeros([self.tsteps, ])
         self.meal_H = np.zeros([self.tsteps, ])
 
+        self.meal_B2 = np.zeros([self.tsteps, ])
+        self.meal_L2 = np.zeros([self.tsteps, ])
+        self.meal_S2 = np.zeros([self.tsteps, ])
+
         self.meal_data = []
 
         self.meal_data = data.cho.values
@@ -211,6 +218,17 @@ class MultiMealT1DData:
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
             if data['cho_label'][m_idx[i]] == 'H':
                 self.meal_H[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+
+            if data['cho_label'][m_idx[i]] == 'B2':
+                self.meal_B2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'L2':
+                self.meal_L2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'S2':
+                self.meal_S2[(m_idx[i] * self.yts):(
+                        (m_idx[i] + 1) * self.yts)] = self.meal[
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
 
     def __setup_u(self):

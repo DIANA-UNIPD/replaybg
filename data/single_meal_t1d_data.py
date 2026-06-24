@@ -37,7 +37,7 @@ class SingleMealT1DData:
 
     """
 
-    def __init__(self, data=pd.DataFrame, data_to_input=None, body_weight=100., environment: Environment = None, ):
+    def __init__(self, data: pd.DataFrame = None, data_to_input=None, body_weight=100., environment: Environment = None, ):
         """Initialize a ``T1DData`` instance from a dataframe.
 
         Args:

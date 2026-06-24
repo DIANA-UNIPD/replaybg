@@ -9,8 +9,6 @@ theta0_type = types.DictType(types.unicode_type, float64)
 theta_prev_type = types.DictType(types.unicode_type, float64)
 x0_type = types.DictType(types.unicode_type, float64)
 JITCLASS_SPEC = [
-    ("_kd_prev", float64),
-    ("_ka2_prev", float64),
     ("_G0", float64),
     ("_X0", float64),
     ("_Qsto1_0", float64),

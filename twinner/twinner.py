@@ -59,14 +59,21 @@ class Twinner():
             ctx = multiprocessing.get_context('fork' if os.name != 'nt' else 'spawn')
             # Run the optimization in parallel
             with ctx.Pool(processes=n_jobs) as pool:
-                results = list(tqdm(
+                raw = list(tqdm(
                     pool.imap(_run_optimization, start_guesses),
                     total=self.n_starts,
                     desc='Twinning using MAP'
                 ))
+            results = [r for r, _ in raw]
+            if self.log_history:
+                for _, h in raw:
+                    if h is not None:
+                        for k in self.history:
+                            self.history[k].extend(h[k])
         else:
-            # Run the optimization sequentially
-            results = [_run_optimization(a) for a in tqdm(start_guesses, desc='Twinning')]
+            # Run the optimization sequentially; history accumulates in-process via _neg_log_posterior
+            raw = [_run_optimization(a) for a in tqdm(start_guesses, desc='Twinning')]
+            results = [r for r, _ in raw]
 
         # Get the best result
         best = min(results, key=lambda r: r.fun)
@@ -233,4 +240,9 @@ def _run_optimization(args):
                               'maxfev': 100000,
                               'disp': False,
                           })
-    return result
+
+    # Return a snapshot of history so the parent process can merge it (needed in parallel mode
+    # where worker-side mutations to self.history never reach the parent).
+    twinner = neg_log_posterior_fn.__self__
+    history = {k: list(v) for k, v in twinner.history.items()} if twinner.log_history else None
+    return result, history
