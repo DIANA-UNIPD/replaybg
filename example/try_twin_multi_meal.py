@@ -42,8 +42,8 @@ if __name__ == '__main__':
         'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
         'SG': {'prior': LogNormal(mu=-3.8, sigma=0.05), 'min': 0, 'max': .5},
         'p2': {'prior': Normal(mu=0.11, sigma=0.05), 'min': 0, 'max': .5},
-        'f': {'prior': Normal(mu=0.8, sigma=0.05), 'min': 0, 'max': 1},
-        #'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
+        #'f': {'prior': Normal(mu=0.8, sigma=0.05), 'min': 0, 'max': 1},
+        'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
         'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
         'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
         'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
@@ -53,17 +53,17 @@ if __name__ == '__main__':
         'kabs_L': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
         'kabs_D': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
         'kabs_S': {'prior': LogNormal(mu=-5.4591, sigma=1.4396), 'min': 0, 'max': .5},
-        #'beta_B': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-        #'beta_L': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-        #'beta_D': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
-        #'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+        'beta_B': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+        'beta_L': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+        'beta_D': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
+        'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
     }
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
                       save_name=save_name,
                       unknown_parameters_prior=unknown_parameters_prior,
-                      parallelize=True, n_jobs=-1, n_starts=64,
-                      log_history=False)
+                      parallelize=True, n_jobs=-1, n_starts=1,
+                      log_history=True)
 
     theta_estimated = result['theta']
     print(theta_estimated)
@@ -80,5 +80,5 @@ if __name__ == '__main__':
     # TODO: add a plot utility
     import matplotlib.pyplot as plt
     plt.plot(df.glucose)
-    plt.plot(out)
+    plt.plot(out["output"][0::rbg_data.yts])
     plt.show()

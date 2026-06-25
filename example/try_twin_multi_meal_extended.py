@@ -92,5 +92,5 @@ if __name__ == '__main__':
     # TODO: add a plot utility
     import matplotlib.pyplot as plt
     plt.plot(df.glucose)
-    plt.plot(out)
+    plt.plot(out["output"][0::rbg_data.yts])
     plt.show()

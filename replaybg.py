@@ -2,6 +2,7 @@ from typing import Dict
 
 import numpy as np
 
+from callbacks.context import ReplayContext
 from environment import Environment
 from twinner.twinner import Twinner
 
@@ -56,20 +57,50 @@ class ReplayBG:
     def replay(self, rbg_data, save_name: str,
                model: object = None,
                theta: Dict = None,
+               callbacks: list | None = None,
                parallelize: bool = False, n_processes: int | None = None,
                ) -> Dict:
         """Runs ReplayBG replay procedure.
+
+        Replays the recorded inputs through the model, optionally letting
+        user-supplied control policies act at every integration minute. Each
+        ``callback`` (a :class:`~control.callback.ReplayCallback`) is invoked
+        before the model steps and may modify the inputs for the current step via
+        the :class:`~control.context.ReplayContext` it receives.
+
+        Returns:
+            dict with keys:
+                ``output``: predicted interstitial glucose at integration resolution.
+                ``input``: applied inputs at integration resolution, shape (tsteps, n).
+                ``data_to_input``: channel index -> name mapping.
+                ``actions``: flat list of action records logged by callbacks.
         """
         # TODO: validate the inputs
 
+        n_ch = rbg_data.u.shape[1]
         out = np.zeros(rbg_data.tsteps, )
+        replayed_u = np.zeros((rbg_data.tsteps, n_ch))
         out[0] = model.output(0)
-        for k in np.arange(1, out.shape[0]):
-            model.step(rbg_data.u[k], k)
+        replayed_u[0] = rbg_data.u[0]
+
+        callbacks = callbacks or []
+        for cb in callbacks:
+            cb.rbg_data = rbg_data
+        ctx = ReplayContext(rbg_data=rbg_data, model=model,
+                            output_history=out, input_history=replayed_u)
+
+        for k in range(1, rbg_data.tsteps):
+            ctx._advance(k, rbg_data.u[k].copy())
+            for cb in callbacks:
+                ctx._active_cb = type(cb).__name__
+                cb.action(ctx)
+            model.step(ctx.u, k)
             out[k] = model.output(k)
+            replayed_u[k] = ctx.u
 
-        out = out[0::rbg_data.yts]
-
-        # TODO: save results before return
-
-        return out
+        return {
+            'output': out,
+            'input': replayed_u,
+            'data_to_input': rbg_data.data_to_input,
+            'actions': ctx._actions,
+        }
