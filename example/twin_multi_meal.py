@@ -18,6 +18,8 @@ from utils.plot_twinning_history import plot_twinning_history
 from utils.plot_twinning import plot_twinning
 from replaybg import ReplayBG
 
+from utils.agata_analysis import analyze_twin
+
 
 if __name__ == '__main__':
     freeze_support()
@@ -75,8 +77,11 @@ if __name__ == '__main__':
     # Plot the twinning fit: simulated model output (with estimated theta) vs the
     # observed data, plus the inputs that drove the fit.
     fig = plot_twinning(rbg_data, model, theta=result['theta'], thresholds=[70, 180])
-    fig.savefig("twin.png")
+    fig.show()
 
     if result['history'] is not None:
         plot_twinning_history(result['history'], param_names=list(unknown_parameters_prior.keys()))
         plt.show()
+
+    analyze_twin(result, rbg_data, model, verbose=rbg.environment.verbose,
+                 path=save_folder, save_name=save_name)

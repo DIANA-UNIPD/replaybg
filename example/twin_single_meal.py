@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from data.single_meal_t1d_data import SingleMealT1DData
 from model.single_meal_t1d import SingleMealT1DModel
 from distributions import Normal, Gamma, LogNormal, Uniform
+from utils.agata_analysis import analyze_twin
 from utils.plot_twinning_history import plot_twinning_history
 from replaybg import ReplayBG
 
@@ -62,8 +63,14 @@ if __name__ == '__main__':
                       log_history=True,
                       path=save_folder, save_name=save_name)
 
-    print(result['theta'])
+    # Analyze the fit with AGATA (glycemic profile of the fitted trace + the
+    # fit-error metrics vs. the reference CGM) and fold the metrics back into
+    # the saved twin_<save_name>.pkl (adds an 'analysis' key).
+    analyze_twin(result, rbg_data, model, verbose=rbg.environment.verbose,
+                 path=save_folder, save_name=save_name)
 
     if result['history'] is not None:
         plot_twinning_history(result['history'], param_names=list(unknown_parameters_prior.keys()))
         plt.show()
+
+

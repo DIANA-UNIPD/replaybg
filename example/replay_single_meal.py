@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from model.single_meal_t1d import SingleMealT1DModel
 from replaybg import ReplayBG
+from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
 from utils.numba_dicts import to_typed_f32_dict
 
@@ -36,6 +37,11 @@ if __name__ == '__main__':
     out = rbg.replay(rbg_data=rbg_data,
                      model=model,
                      path=save_folder, save_name=save_name)
+
+    # Analyze the replayed glucose with AGATA and fold the metrics back into the
+    # saved replay_<save_name>.pkl (adds an 'analysis' key).
+    analyze_replay(out, ts=5, verbose=rbg.environment.verbose,
+                   path=save_folder, save_name=save_name)
 
     # Plot the measured glucose against the replayed output
     plt.plot(rbg_data.y, label='measured')

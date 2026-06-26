@@ -40,9 +40,3 @@ if __name__ == '__main__':
                      path=save_folder, save_name=save_name)
 
     # Plot the measured glucose against the replayed output
-    plt.plot(rbg_data.y, label='measured')
-    plt.plot(out["output"][0::rbg_data.yts], label='replay')
-    plt.ylabel('glucose [mg/dL]')
-    plt.xlabel('sample')
-    plt.legend()
-    plt.show()

@@ -14,4 +14,5 @@ dependencies = [
     "mkdocs-material",
     "mkdocstrings[python]",
     "tqdm",
+    "py_agata",
 ]
