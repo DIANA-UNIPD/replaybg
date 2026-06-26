@@ -1,0 +1,70 @@
+"""Replay-only example with closed-loop callbacks and a noisy CGM sensor.
+
+Loads the twinning results produced by ``twin_multi_meal.py`` and replays them twice:
+once as a plain baseline, and once with a correction-bolus and a hypo-treatment policy
+acting on a realistic, noisy CGM measurement. No twinning happens here.
+"""
+
+from multiprocessing import freeze_support
+
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from model.multi_meal_t1d import MultiMealT1DModel
+from replaybg import ReplayBG
+from callbacks import CorrectionBolus, HypoTreatment
+from sensors import Vettoretti19CGM
+from utils.load_results import load_results
+from utils.numba_dicts import to_typed_f32_dict
+
+
+if __name__ == '__main__':
+    freeze_support()
+    save_folder = os.path.join(os.path.abspath(''), 'results')
+    save_name = 'multi_meal_day_1'
+
+    # Create ReplayBg instance
+    rbg = ReplayBG()
+
+    # Load the twinning results (theta + rbg_data) saved by twin_multi_meal.py
+    twin = load_results(save_folder, save_name, prefix='twin')
+    theta_estimated = twin['theta']
+    rbg_data = twin['rbg_data']
+
+    # --- Baseline replay (no policy) ---
+    model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
+                              theta0=to_typed_f32_dict(theta_estimated), t_start=rbg_data.t_start)
+    baseline = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, save_name='baseline')
+
+    # --- Replay with a correction-bolus callback, acting on a noisy CGM sensor ---
+    # The sensor turns the model output (interstitial glucose) into a realistic CGM
+    # measurement. Callbacks read ctx.measurement, so they close the loop on the noisy
+    # signal instead of the true output.
+    correction_bolus_callback = CorrectionBolus(threshold=180, target=120, cf=50, lockout_min=60)
+    hypotreatment_callback = HypoTreatment(threshold=70, carbs=15, lockout_min=30)
+    sensor = Vettoretti19CGM()
+    model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
+                              theta0=to_typed_f32_dict(theta_estimated), t_start=rbg_data.t_start)
+    controlled = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, save_name='controlled',
+                            callbacks=[correction_bolus_callback, hypotreatment_callback],
+                            sensor=sensor)
+
+    # Exhaustive log of what the callbacks did, as a tidy table
+    actions = pd.DataFrame(controlled['actions'])
+    print(actions)
+
+    # Plot baseline vs. controlled glucose (with the CGM samples), and the applied bolus
+    bolus_idx = next(i for i, n in controlled['data_to_input'].items() if n == 'bolus')
+    fig, (ax_g, ax_b) = plt.subplots(2, 1, sharex=True)
+    ax_g.plot(baseline['output'], label='baseline')
+    ax_g.plot(controlled['output'], label='with correction bolus (true IG)')
+    ax_g.plot(controlled['measurement_time'], controlled['measurement'],
+              '.', ms=4, label='CGM measurement')
+    ax_g.axhline(180, color='r', ls='--', lw=0.8)
+    ax_g.set_ylabel('glucose [mg/dL]')
+    ax_g.legend()
+    ax_b.plot(controlled['input'][:, bolus_idx])
+    ax_b.set_ylabel('bolus [mU/(kg·min)]')
+    ax_b.set_xlabel('sample')
+    plt.show()

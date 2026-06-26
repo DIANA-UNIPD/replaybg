@@ -24,6 +24,13 @@ class ReplayContext:
             it through the helpers; later callbacks see earlier edits.
         output_history: Interstitial glucose outputs; valid up to index ``k-1``.
         input_history: Applied input rows; valid up to index ``k-1``.
+        measurement: Latest sensor measurement available at step ``k`` (held between
+            sensor samples). When ``replay()`` is called without a sensor this carries
+            the true model output, so policies reading it behave as if perfectly
+            observed. Prefer this over ``output_history`` in control policies.
+        measurement_history: Sensor measurement at integration resolution (zero-order
+            held between samples); valid up to index ``k-1``. Mirrors ``output_history``
+            but reflects the noisy sensor signal when a sensor is supplied.
         data_to_input: Mapping from channel index to channel name.
         model: The live model (read-only by convention) for advanced state such
             as plasma insulin (``model.Ip``) to derive insulin-on-board.
@@ -36,6 +43,8 @@ class ReplayContext:
         self.u = rbg_data.u[0].copy()
         self.output_history = output_history
         self.input_history = input_history
+        self.measurement = output_history[0]
+        self.measurement_history = output_history
         self.data_to_input = rbg_data.data_to_input
         self.model = model
 

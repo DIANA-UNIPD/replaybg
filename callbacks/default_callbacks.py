@@ -26,7 +26,7 @@ class CorrectionBolus(ReplayCallback):
         self.last_correction_k = -10 ** 9
 
     def action(self, ctx):
-        g = ctx.output_history[ctx.k - 1]
+        g = ctx.measurement
         if g > self.threshold and (ctx.k - self.last_correction_k) >= self.lockout_min:
             cb_u = (g - self.target) / self.cf
             cb_mu_kgmin = cb_u * (1000.0 / self.rbg_data.body_weight)
@@ -59,7 +59,7 @@ class HypoTreatment(ReplayCallback):
         self.last_treatment_k = -10 ** 9
 
     def action(self, ctx):
-        g = ctx.output_history[ctx.k - 1]
+        g = ctx.measurement
         if g < self.threshold and (ctx.k - self.last_treatment_k) >= self.lockout_min:
             carbs_mg_kgmin = self.carbs * (1000.0 / self.rbg_data.body_weight)
             meal_prev = ctx.get_input("meal_H")

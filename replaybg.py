@@ -67,6 +67,7 @@ class ReplayBG:
                model: object = None,
                theta: Dict = None,
                callbacks: list | None = None,
+               sensor: object = None,
                parallelize: bool = False, n_processes: int | None = None,
                path: str | None = None, save_name: str | None = None,
                ) -> Dict:
@@ -78,6 +79,14 @@ class ReplayBG:
         before the model steps and may modify the inputs for the current step via
         the :class:`~control.context.ReplayContext` it receives.
 
+        An optional ``sensor`` (a :class:`~sensors.sensor.Sensor`) observes the model
+        output and produces a measurement of it at its own cadence (``sensor.ts``). The
+        measurement is exposed to the callbacks via ``ctx.measurement`` (held between
+        samples), so closed-loop policies act on the realistic, noisy signal rather than
+        the true output. The sensor is output-agnostic: it sees only ``model.output(k)``.
+        When no sensor is supplied, ``ctx.measurement`` carries the true output, so
+        behaviour is unchanged.
+
         If ``path`` is provided, the replay results (the returned dict plus
         ``rbg_data``) are pickled to ``<path>/<name>.pkl``. When ``name`` is
         omitted it defaults to ``replay_YYYY_mm_dd.pkl``.
@@ -88,6 +97,9 @@ class ReplayBG:
                 ``input``: applied inputs at integration resolution, shape (tsteps, n).
                 ``data_to_input``: channel index -> name mapping.
                 ``actions``: flat list of action records logged by callbacks.
+                ``measurement``: (only with a sensor) sensor samples at sensor cadence.
+                ``measurement_time``: (only with a sensor) integration-step index of
+                    each sample.
         """
         # TODO: validate the inputs
 
@@ -103,8 +115,28 @@ class ReplayBG:
         ctx = ReplayContext(rbg_data=rbg_data, model=model,
                             output_history=out, input_history=replayed_u)
 
+        use_sensor = sensor is not None
+        if use_sensor:
+            # Seed the global RNG and (re)connect the sensor under that seed so its
+            # whole error realization (sampled parameters + per-step noise) is
+            # reproducible, regardless of when the sensor object was constructed.
+            np.random.seed(self.environment.seed)
+            sensor.connect_new(connected_at=0)
+            ts = sensor.ts
+            n_samp = (rbg_data.tsteps - 1) // ts + 1
+            measurement = np.full(n_samp, np.nan)
+            measurement_time = np.zeros(n_samp, dtype=int)
+            measurement[0] = sensor.measure(out[0], past_values=out[:0], t=0.0)
+            measurement_time[0] = 0
+            # Zero-order-held measurement at integration resolution (for ctx history).
+            meas_hold = out.copy()
+            meas_hold[0] = measurement[0]
+            ctx.measurement_history = meas_hold
+
         for k in range(1, rbg_data.tsteps):
             ctx._advance(k, rbg_data.u[k].copy())
+            # Latest measurement available to a controller acting at step k.
+            ctx.measurement = meas_hold[k - 1] if use_sensor else out[k - 1]
             for cb in callbacks:
                 ctx._active_cb = type(cb).__name__
                 cb.action(ctx)
@@ -112,12 +144,28 @@ class ReplayBG:
             out[k] = model.output(k)
             replayed_u[k] = ctx.u
 
+            if use_sensor:
+                if k % ts == 0:
+                    if (k + sensor.t_offset) % sensor.max_lifetime == 0:
+                        sensor.connect_new(connected_at=k)
+                    j = k // ts
+                    measurement[j] = sensor.measure(
+                        out[k], past_values=out[:k],
+                        t=(k - sensor.connected_at) / (24 * 60))
+                    measurement_time[j] = k
+                    meas_hold[k] = measurement[j]
+                else:
+                    meas_hold[k] = meas_hold[k - 1]
+
         ret = {
             'output': out,
             'input': replayed_u,
             'data_to_input': rbg_data.data_to_input,
             'actions': ctx._actions,
         }
+        if use_sensor:
+            ret['measurement'] = measurement
+            ret['measurement_time'] = measurement_time
 
         # Save results if a destination path was provided
         if path is not None:
