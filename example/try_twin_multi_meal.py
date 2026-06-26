@@ -20,15 +20,15 @@ if __name__ == '__main__':
     freeze_support()
     df = pd.read_parquet("data_day_1.parquet")
     df['t'] = pd.to_datetime(df['t'])
-    save_folder = os.path.join(os.path.abspath(''))
-    save_name = 'test'
+    save_folder = os.path.join(os.path.abspath(''), 'results')
+    save_name = 'data_day_1'
 
     # Impute breakfast (clearly missing)
     df.loc[10, 'cho'] = 10
     df.loc[10, 'cho_label'] = 'B'
 
     # Create ReplayBg instance
-    rbg = ReplayBG(save_folder=save_folder)
+    rbg = ReplayBG()
 
     # Create data in required format
     rbg_data = MultiMealT1DData(data=df,
@@ -60,10 +60,10 @@ if __name__ == '__main__':
     }
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
-                      save_name=save_name,
                       unknown_parameters_prior=unknown_parameters_prior,
                       parallelize=True, n_jobs=-1, n_starts=1,
-                      log_history=True)
+                      log_history=True,
+                      path=save_folder, save_name=save_name)
 
     theta_estimated = result['theta']
     print(theta_estimated)
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps, theta0=to_typed_f32_dict(theta_estimated), t_start=t_start)
     out = rbg.replay(rbg_data=rbg_data,
                      model=model,
-                     save_name=save_name)
+                     path=save_folder, save_name=save_name)
 
     # TODO: add a plot utility
     import matplotlib.pyplot as plt

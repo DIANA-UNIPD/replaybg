@@ -5,13 +5,14 @@ import numpy as np
 from callbacks.context import ReplayContext
 from environment import Environment
 from twinner.twinner import Twinner
+from utils.save_results import save_results
 
 
 class ReplayBG:
     """Core class of ReplayBG.
     """
 
-    def __init__(self, save_folder: str,
+    def __init__(self,
                  ts: int = 1,
                  seed: int = 1,
                  plot_mode: bool = True, verbose: bool = True
@@ -22,20 +23,24 @@ class ReplayBG:
         # TODO: Validate input
 
         # Initialize the environment parameters
-        self.environment = Environment(save_folder=save_folder,
-                                       ts=ts,
+        self.environment = Environment(ts=ts,
                                        seed=seed,
                                        plot_mode=plot_mode,
                                        verbose=verbose)
 
-    def twin(self, rbg_data, save_name: str,
+    def twin(self, rbg_data,
              model: object = None,
              unknown_parameters_prior: Dict = None,
              n_starts: int = 64,
              parallelize: bool = False, n_jobs: int | None = None,
              log_history: bool = False,
+             path: str | None = None, save_name: str | None = None,
              ) -> Dict:
         """Runs ReplayBG twinning procedure.
+
+        If ``path`` is provided, the twinning results (``theta``, ``history`` and
+        ``rbg_data``) are pickled to ``<path>/<name>.pkl``. When ``name`` is
+        omitted it defaults to ``twin_YYYY_mm_dd.pkl``.
         """
         # TODO: validate the inputs
 
@@ -47,18 +52,23 @@ class ReplayBG:
                                        rbg_data=rbg_data,
                                        unknown_parameters_prior=unknown_parameters_prior)
 
-        # TODO: save results before return
-
-        return {
+        ret = {
             'theta': dict(zip(unknown_parameters_prior.keys(), theta_estimated['x'])),
             'history': twinner.history if log_history else None,
         }
 
-    def replay(self, rbg_data, save_name: str,
+        # Save results if a destination path was provided
+        if path is not None:
+            save_results({**ret, 'rbg_data': rbg_data}, path, save_name, prefix='twin')
+
+        return ret
+
+    def replay(self, rbg_data,
                model: object = None,
                theta: Dict = None,
                callbacks: list | None = None,
                parallelize: bool = False, n_processes: int | None = None,
+               path: str | None = None, save_name: str | None = None,
                ) -> Dict:
         """Runs ReplayBG replay procedure.
 
@@ -67,6 +77,10 @@ class ReplayBG:
         ``callback`` (a :class:`~control.callback.ReplayCallback`) is invoked
         before the model steps and may modify the inputs for the current step via
         the :class:`~control.context.ReplayContext` it receives.
+
+        If ``path`` is provided, the replay results (the returned dict plus
+        ``rbg_data``) are pickled to ``<path>/<name>.pkl``. When ``name`` is
+        omitted it defaults to ``replay_YYYY_mm_dd.pkl``.
 
         Returns:
             dict with keys:
@@ -98,9 +112,15 @@ class ReplayBG:
             out[k] = model.output(k)
             replayed_u[k] = ctx.u
 
-        return {
+        ret = {
             'output': out,
             'input': replayed_u,
             'data_to_input': rbg_data.data_to_input,
             'actions': ctx._actions,
         }
+
+        # Save results if a destination path was provided
+        if path is not None:
+            save_results({**ret}, path, save_name, prefix='replay')
+
+        return ret

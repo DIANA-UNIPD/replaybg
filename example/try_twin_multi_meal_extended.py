@@ -32,7 +32,7 @@ if __name__ == '__main__':
     df.loc[312, "cho_label"] = 'B2'
 
     # Create ReplayBg instance
-    rbg = ReplayBG(save_folder=save_folder)
+    rbg = ReplayBG()
 
     # Create data in required format
     rbg_data = MultiMealExtendedT1DData(data=df,
@@ -71,10 +71,10 @@ if __name__ == '__main__':
     }
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
-                      save_name=save_name,
                       unknown_parameters_prior=unknown_parameters_prior,
                       parallelize=True, n_jobs=-1, n_starts=4,
-                      log_history=False)
+                      log_history=False,
+                      path=save_folder, name=save_name)
 
     # theta_estimated = result['theta']
 
@@ -87,7 +87,7 @@ if __name__ == '__main__':
     model = MultiMealExtendedT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps, theta0=to_typed_f32_dict(result['theta']), t_start=t_start)
     out = rbg.replay(rbg_data=rbg_data,
                      model=model,
-                     save_name=save_name)
+                     path=save_folder)
 
     # TODO: add a plot utility
     import matplotlib.pyplot as plt

@@ -25,7 +25,7 @@ if __name__ == '__main__':
     df.loc[10, 'cho_label'] = 'B'
 
     # Create ReplayBg instance
-    rbg = ReplayBG(save_folder=save_folder)
+    rbg = ReplayBG()
 
     # Create data in required format
     rbg_data = SingleMealT1DData(data=df,
@@ -50,10 +50,10 @@ if __name__ == '__main__':
 
     result = rbg.twin(rbg_data=rbg_data,
                                model=model,
-                               save_name=save_name,
                                unknown_parameters_prior=unknown_parameters_prior,
                                parallelize=True, n_jobs=-1, n_starts=16,
                                #log_history=True
+                               path=save_folder, name=save_name,
                       )
     theta_estimated = result['theta']
     print(result)
@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     out = rbg.replay(rbg_data=rbg_data,
                      model=model,
-                     save_name=save_name)
+                     path=save_folder)
 
     if result['history'] is not None:
         fig = plot_twinning_history(result['history'], param_names=list(unknown_parameters_prior.keys()))

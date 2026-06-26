@@ -26,7 +26,7 @@ if __name__ == '__main__':
     df.loc[10, 'cho_label'] = 'B'
 
     # Create ReplayBg instance
-    rbg = ReplayBG(save_folder=save_folder)
+    rbg = ReplayBG()
 
     # Create data in required format
     rbg_data = MultiMealT1DData(data=df, environment=rbg.environment)
@@ -56,22 +56,22 @@ if __name__ == '__main__':
     }
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
-                      save_name=save_name,
                       unknown_parameters_prior=unknown_parameters_prior,
-                      parallelize=True, n_jobs=-1, n_starts=1)
+                      parallelize=True, n_jobs=-1, n_starts=1,
+                      path=save_folder, name=save_name)
     theta_estimated = result['theta']
 
     # --- Baseline replay (no policy) ---
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
                               theta0=to_typed_f32_dict(theta_estimated), t_start=t_start)
-    baseline = rbg.replay(rbg_data=rbg_data, model=model, save_name=save_name)
+    baseline = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, name='baseline')
 
     # --- Replay with a correction-bolus callback ---
     correction_bolus_callback = CorrectionBolus(threshold=180, target=120, cf=20, lockout_min=60)
     hypotreatment_callback = HypoTreatment(threshold=70, carbs=15, lockout_min=15)
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
                               theta0=to_typed_f32_dict(theta_estimated), t_start=t_start)
-    controlled = rbg.replay(rbg_data=rbg_data, model=model, save_name=save_name,
+    controlled = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, name='controlled',
                             callbacks=[correction_bolus_callback, hypotreatment_callback],)
 
     # Exhaustive log of what the callback did, as a tidy table
