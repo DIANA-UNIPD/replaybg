@@ -45,7 +45,8 @@ class ReplayBG:
         # TODO: validate the inputs
 
         # Initialize the twinner
-        twinner = Twinner(parallelize=parallelize, n_jobs=n_jobs, n_starts=n_starts, log_history=log_history)
+        twinner = Twinner(parallelize=parallelize, n_jobs=n_jobs, n_starts=n_starts, log_history=log_history,
+                          verbose=self.environment.verbose)
 
         # Run the twinning procedure
         theta_estimated = twinner.twin(model=model,

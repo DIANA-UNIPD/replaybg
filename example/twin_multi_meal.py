@@ -15,6 +15,7 @@ from data.multi_meal_t1d_data import MultiMealT1DData
 from model.multi_meal_t1d import MultiMealT1DModel
 from distributions import Normal, Gamma, LogNormal, Uniform
 from utils.plot_twinning_history import plot_twinning_history
+from utils.plot_twinning import plot_twinning
 from replaybg import ReplayBG
 
 
@@ -70,6 +71,11 @@ if __name__ == '__main__':
                       path=save_folder, save_name=save_name)
 
     print(result['theta'])
+
+    # Plot the twinning fit: simulated model output (with estimated theta) vs the
+    # observed data, plus the inputs that drove the fit.
+    fig = plot_twinning(rbg_data, model, theta=result['theta'], thresholds=[70, 180])
+    fig.savefig("twin.png")
 
     if result['history'] is not None:
         plot_twinning_history(result['history'], param_names=list(unknown_parameters_prior.keys()))

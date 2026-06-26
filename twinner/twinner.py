@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import numpy as np
@@ -21,13 +22,15 @@ class Twinner():
                  parallelize: bool = True,
                  n_jobs: int | None = None,
                  n_starts: int = 64,
-                 log_history: bool = False
+                 log_history: bool = False,
+                 verbose: bool = True
     ):
         """Initialize a ``Twinner`` instance.
         """
         self.parallelize = parallelize
         self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
+        self.verbose = verbose
 
         self.log_history = log_history
         if self.log_history:
@@ -52,9 +55,21 @@ class Twinner():
                                     for v in unknown_parameters_prior.values()])
             start_guesses.append((i, start_guess))
 
+        # Resolve the effective number of jobs (used both for running and for the header)
+        n_jobs = multiprocessing.cpu_count() if self.n_jobs == -1 else self.n_jobs
+
+        # Print a run header so the user can sanity-check the twinning setup
+        if self.verbose:
+            param_names = list(unknown_parameters_prior.keys())
+            mode = f'parallel ({n_jobs} jobs)' if self.parallelize else 'sequential'
+            print('--- Twinning (MAP estimation) ---')
+            print(f'  starts          : {self.n_starts}')
+            print(f'  mode            : {mode}')
+            print(f'  parameters ({len(param_names)})  : {", ".join(param_names)}')
+
+        t0 = time.perf_counter()
+
         if self.parallelize:
-            # Set the number of jobs
-            n_jobs = multiprocessing.cpu_count() if self.n_jobs == -1 else self.n_jobs
             # Set the context
             ctx = multiprocessing.get_context('fork' if os.name != 'nt' else 'spawn')
             # Run the optimization in parallel
@@ -62,7 +77,8 @@ class Twinner():
                 raw = list(tqdm(
                     pool.imap(_run_optimization, start_guesses),
                     total=self.n_starts,
-                    desc='Twinning using MAP'
+                    desc='Twinning using MAP',
+                    disable=not self.verbose
                 ))
             results = [r for r, _ in raw]
             if self.log_history:
@@ -72,11 +88,31 @@ class Twinner():
                             self.history[k].extend(h[k])
         else:
             # Run the optimization sequentially; history accumulates in-process via _neg_log_posterior
-            raw = [_run_optimization(a) for a in tqdm(start_guesses, desc='Twinning')]
+            raw = [_run_optimization(a)
+                   for a in tqdm(start_guesses, desc='Twinning', disable=not self.verbose)]
             results = [r for r, _ in raw]
+
+        elapsed = time.perf_counter() - t0
 
         # Get the best result
         best = min(results, key=lambda r: r.fun)
+
+        # Print a convergence summary across all starts
+        if self.verbose:
+            funs = np.array([r.fun for r in results], dtype=float)
+            finite = funs[np.isfinite(funs)]
+            n_failed = len(funs) - len(finite)
+            print('--- Twinning summary ---')
+            print(f'  elapsed         : {elapsed:.1f} s')
+            print(f'  failed starts   : {n_failed} / {len(funs)}')
+            if len(finite):
+                print(f'  objective (neg log-posterior)')
+                print(f'    best          : {best.fun:.3f}')
+                print(f'    min/med/max   : {finite.min():.3f} / '
+                      f'{np.median(finite):.3f} / {finite.max():.3f}')
+            else:
+                print('  WARNING: no start produced a finite objective '
+                      '(check priors/bounds and the model).')
 
         # Round integer parameters and clip to bounds (Powell has no native bound support)
         clipped_x = []
@@ -85,6 +121,22 @@ class Twinner():
                 x = float(round(x))
             clipped_x.append(np.clip(x, v['min'], v['max']))
         clipped_x = np.array(clipped_x)
+
+        # Print the best-fit parameters, flagging any that sit at their bounds
+        if self.verbose:
+            print('--- Best-fit parameters ---')
+            for x, (k, v) in zip(clipped_x, unknown_parameters_prior.items()):
+                lo, hi = v['min'], v['max']
+                tol = 1e-6 * max(1.0, abs(hi - lo))
+                flags = []
+                if x <= lo + tol:
+                    flags.append('at min bound')
+                elif x >= hi - tol:
+                    flags.append('at max bound')
+                if v.get('integer', False):
+                    flags.append('integer')
+                suffix = f'   [{", ".join(flags)}]' if flags else ''
+                print(f'  {k:<14} = {x:.4g}   (bounds: {lo:g}..{hi:g}){suffix}')
 
         # Return the best result
         ret = dict()

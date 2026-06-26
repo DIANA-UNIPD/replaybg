@@ -18,6 +18,8 @@ from sensors import Vettoretti19CGM
 from utils.load_results import load_results
 from utils.numba_dicts import to_typed_f32_dict
 
+from utils.plot_replay import plot_replay
+
 
 if __name__ == '__main__':
     freeze_support()
@@ -53,18 +55,6 @@ if __name__ == '__main__':
     # Exhaustive log of what the callbacks did, as a tidy table
     actions = pd.DataFrame(controlled['actions'])
     print(actions)
-
-    # Plot baseline vs. controlled glucose (with the CGM samples), and the applied bolus
-    bolus_idx = next(i for i, n in controlled['data_to_input'].items() if n == 'bolus')
-    fig, (ax_g, ax_b) = plt.subplots(2, 1, sharex=True)
-    ax_g.plot(baseline['output'], label='baseline')
-    ax_g.plot(controlled['output'], label='with correction bolus (true IG)')
-    ax_g.plot(controlled['measurement_time'], controlled['measurement'],
-              '.', ms=4, label='CGM measurement')
-    ax_g.axhline(180, color='r', ls='--', lw=0.8)
-    ax_g.set_ylabel('glucose [mg/dL]')
-    ax_g.legend()
-    ax_b.plot(controlled['input'][:, bolus_idx])
-    ax_b.set_ylabel('bolus [mU/(kg·min)]')
-    ax_b.set_xlabel('sample')
-    plt.show()
+    plot_replay(controlled)
+    fig = plot_replay(controlled, thresholds=[70, 180])
+    fig.savefig("replay.png")
