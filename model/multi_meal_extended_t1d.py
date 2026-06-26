@@ -117,7 +117,89 @@ JITCLASS_SPEC = [
 
 @jitclass_(JITCLASS_SPEC)
 class MultiMealExtendedT1DModel:
-    """Physiological model of glucose-insulin dynamics for a type 1 diabetic patient with multiple daily meals.
+    """An extended multi-meal physiological model of glucose-insulin dynamics for T1D.
+
+    The model is a system of ODEs integrated with Backward Euler at a one-minute
+    resolution. It extends :class:`~model.multi_meal_t1d.MultiMealT1DModel` with
+    second-occurrence meal slots (``B2``, ``L2``, ``S2``) and a second breakfast
+    insulin sensitivity ``SI_B2`` so that simulations spanning more than one day
+    can be twinned in a single segment. The interstitial glucose is the
+    observable output. The class is compiled with Numba's ``@jitclass``; all
+    parameters are passed in through Numba typed dicts.
+
+    ...
+    Attributes
+    ----------
+    u2ss : float
+        Steady-state basal insulin (the basal insulin rate at equilibrium).
+    f : float
+        Fraction of intestinal absorption that appears in plasma.
+    VG : float
+        Glucose distribution volume.
+    VI : float
+        Insulin distribution volume.
+    alpha : int
+        Rate governing the lag between plasma and interstitial glucose.
+    SI_B, SI_L, SI_D, SI_B2 : float
+        Insulin sensitivity for the breakfast, lunch, dinner/night and
+        second-day breakfast windows.
+    SG : float
+        Glucose effectiveness.
+    Gb : float
+        Basal (target) glucose concentration.
+    p2 : float
+        Rate constant of the remote insulin (action) compartment.
+    r1, r2 : float
+        Parameters of the non-symmetric hypoglycaemia risk function.
+    ka2, kd, ke : float
+        Insulin pharmacokinetic rate constants.
+    tau : int
+        Integer delay (minutes) applied to the subcutaneous insulin input.
+    kabs_B, kabs_L, kabs_D, kabs_S, kabs_H, kabs_B2, kabs_L2, kabs_S2 : float
+        Per-meal gut-absorption rate constants (including second occurrences).
+    kempt : float
+        Gastric emptying rate constant shared across meal slots.
+    beta_B, beta_L, beta_D, beta_S, beta_B2, beta_L2, beta_S2 : int
+        Per-meal announcement delays (integer minutes).
+    Ipb : float
+        Basal plasma insulin derived from ``u2ss``.
+    G, X, Isc1, Isc2, Ip, IG : numpy.ndarray
+        State trajectories for plasma glucose, insulin action, the two
+        subcutaneous insulin compartments, plasma insulin and interstitial
+        glucose.
+    Qsto1_*, Qsto2_*, Qgut_* : numpy.ndarray
+        Per-meal gastric (1, 2) and gut compartment trajectories, one set per
+        meal label (including second occurrences).
+    theta0 : numba.typed.Dict
+        The initial parameter dict the model was constructed with.
+    theta_prev : numba.typed.Dict
+        Parameters of the previous segment, used to scale carry-over initial
+        conditions across segments.
+    x0 : numba.typed.Dict
+        Initial-condition dict (carry-over state from a previous segment).
+    tsteps : int
+        Number of integration steps.
+    t_start : int
+        Minute-of-day at which this segment starts (drives the time-of-day SI).
+    n_u : int
+        Number of input channels (11).
+    u : numpy.ndarray
+        Input history buffer used to retrieve delayed inputs during ``step``.
+    previous_ra : numpy.ndarray
+        Rate of appearance carried over from the previous segment.
+
+    Methods
+    -------
+    reset(theta0):
+        Resets parameters and re-initialises the state arrays.
+    step(u, t):
+        Advances the model by one minute.
+    output(t):
+        Returns the model output (interstitial glucose) at step ``t``.
+    get_final_x0():
+        Returns the end-of-segment state as a typed dict.
+    get_theta():
+        Returns the current parameters as a typed dict.
     """
 
     def __init__(self,
@@ -128,7 +210,25 @@ class MultiMealExtendedT1DModel:
                  t_start=240,
                  theta_prev=Dict.empty(key_type=types.unicode_type, value_type=float64),
                  ):
-        """Initialize the model and allocate state arrays.
+        """Constructs the model and allocates the state arrays.
+
+        Parameters
+        ----------
+        u2ss : float
+            Steady-state basal insulin (the basal insulin rate at equilibrium).
+        theta0 : numba.typed.Dict, optional
+            Initial model parameters. Missing entries fall back to default values.
+        x0 : numba.typed.Dict, optional
+            Initial conditions (carry-over state). Missing entries fall back to
+            the steady state.
+        tsteps : int, optional, default : 1440
+            Number of integration steps to allocate.
+        t_start : int, optional, default : 240
+            Minute-of-day at which this segment starts, driving the time-of-day
+            insulin sensitivity selection.
+        theta_prev : numba.typed.Dict, optional
+            Parameters of the previous segment, used to scale the carry-over
+            initial conditions. Empty for a cold start.
         """
 
         # Initial values of the model parameters (just a subset) and states
@@ -156,8 +256,16 @@ class MultiMealExtendedT1DModel:
     def reset(self,
               theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
               ):
-        """Resets all model parameters and re-initialise state arrays.
-        Parameters are set to those provided in theta0, or to default values if not provided.
+        """Resets all model parameters and re-initialises the state arrays.
+
+        Parameters are set to those provided in ``theta0``, or to default values
+        when not provided.
+
+        Parameters
+        ----------
+        theta0 : numba.typed.Dict, optional
+            The model parameters to set. Missing entries fall back to default
+            values.
         """
 
         # Reset parameters first
@@ -173,6 +281,14 @@ class MultiMealExtendedT1DModel:
     def _reset_theta(self,
               theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
               ):
+        """Sets the model parameters from ``theta0``, falling back to defaults.
+
+        Parameters
+        ----------
+        theta0 : numba.typed.Dict, optional
+            The model parameters to set. Missing entries fall back to default
+            values.
+        """
         # --- Structural / volume parameters ---
         self.f = theta0["f"] if "f" in theta0 else np.float64(0.9)
         self.VG = theta0["VG"] if "VG" in theta0 else np.float64(1.45)
@@ -224,6 +340,12 @@ class MultiMealExtendedT1DModel:
         self.beta_S2 = np.int16(theta0["beta_S2"]) if "beta_S2" in theta0 else np.int16(0)
 
     def _reset_x0(self):
+        """Initialises the state arrays from ``x0``, falling back to the steady state.
+
+        Carry-over insulin and insulin-action initial conditions are rescaled by
+        the ratio between the current and previous segment parameters when
+        ``theta_prev`` is provided.
+        """
 
         # --- Initial conditions (fall back to steady state if not provided) ---
 
@@ -373,6 +495,7 @@ class MultiMealExtendedT1DModel:
         self.Ip[0] = self._Ip0
 
     def _reset_u(self):
+        """Allocates the input history buffer and seeds the basal channel."""
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
         self.u[8, 0] = self.u2ss  # slot 8 = bolus in data convention, but set to u2ss
@@ -382,7 +505,15 @@ class MultiMealExtendedT1DModel:
 
 
     def step(self, u: float64[:], t: int64):
-        """Advance the model by one minute using Backward Euler integration.
+        """Advances the model by one minute using Backward Euler integration.
+
+        Parameters
+        ----------
+        u : numpy.ndarray
+            The input vector for this step (11 channels: the eight meal slots
+            B/L/D/S/H/B2/L2/S2, bolus, basal and hour-of-day).
+        t : int
+            The integration step index (minute) to compute.
         """
         # Store current inputs in the history buffer so delayed values can be
         # retrieved at this or future timesteps via index arithmetic.
@@ -505,28 +636,34 @@ class MultiMealExtendedT1DModel:
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 
     def output(self, t: float64):
-        """Return the model output at time step ``t``.
+        """Returns the model output at time step ``t``.
 
         The observable output is the interstitial glucose concentration, which
         corresponds to the signal measured by a continuous glucose monitor.
 
-        Args:
-            t: Time step index (integer minute).
+        Parameters
+        ----------
+        t : int
+            Time step index (integer minute).
 
-        Returns:
-            float: Interstitial glucose concentration at time ``t`` (mg/dL).
+        Returns
+        -------
+        float
+            The interstitial glucose concentration at time ``t`` (mg/dL).
         """
         return self.IG[t]
 
     def get_final_x0(self):
-        """Return the final state of the model as a Numba typed dict.
+        """Returns the final state of the model as a Numba typed dict.
 
         Reads the last time-step of every state array and packs the values
         into a typed dict suitable for passing as ``x0`` to a subsequent
         segment's ``reset()`` call.
 
-        Returns:
-            Numba typed dict[unicode, float64] with keys matching the ``x0``
+        Returns
+        -------
+        numba.typed.Dict
+            A typed dict (unicode -> float64) with keys matching the ``x0``
             contract expected by ``reset()``.
         """
         final_x0 = Dict.empty(key_type=types.unicode_type, value_type=float64)
@@ -563,13 +700,15 @@ class MultiMealExtendedT1DModel:
         return final_x0
 
     def get_theta(self):
-        """Return the current model parameters as a Numba typed dict.
+        """Returns the current model parameters as a Numba typed dict.
 
         Packs all parameters set by :meth:`_reset_theta` into a typed dict
         suitable for passing as ``theta0`` to a subsequent ``reset()`` call.
 
-        Returns:
-            Numba typed dict[unicode, float64] with keys matching the
+        Returns
+        -------
+        numba.typed.Dict
+            A typed dict (unicode -> float64) with keys matching the
             ``unknown_parameters_prior`` naming convention.
         """
         theta = Dict.empty(key_type=types.unicode_type, value_type=float64)
@@ -611,7 +750,12 @@ class MultiMealExtendedT1DModel:
 
 
     def _override_stomach(self):
-        """
+        """Converts carry-over meal compartments into a forcing rate of appearance.
+
+        Evolves the previous segment's per-meal gut compartments forward (with no
+        new meal input) under the previous parameters, accumulates the resulting
+        rate of appearance into ``previous_ra``, and zeroes the meal entries of
+        ``x0`` so the carry-over is handled entirely through the forcing term.
         """
         x0 = self.x0
 

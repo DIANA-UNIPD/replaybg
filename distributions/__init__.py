@@ -14,45 +14,66 @@ class LogNormal(object):
     log-normal distribution parameterized by the mean and standard deviation
     of the underlying normal distribution.
 
-    Attributes:
-        mu: Mean of the underlying normal distribution.
-        sigma: Standard deviation of the underlying normal distribution.
+    ...
+    Attributes
+    ----------
+    mu : float
+        Mean of the underlying normal distribution.
+    sigma : float
+        Standard deviation of the underlying normal distribution.
+
+    Methods
+    -------
+    evaluate(x):
+        Evaluates the probability density function at ``x``.
+    sample(min_val, max_val, seed):
+        Draws a bounded random sample from the distribution.
     """
 
     def __init__(self, mu, sigma):
-        """Initialize a `LogNormal` distribution.
+        """Constructs all the necessary attributes for the LogNormal object.
 
-        Args:
-            mu: Mean of the underlying normal distribution.
-            sigma: Standard deviation of the underlying normal distribution.
-
-        Returns:
-            None
+        Parameters
+        ----------
+        mu : float
+            Mean of the underlying normal distribution.
+        sigma : float
+            Standard deviation of the underlying normal distribution.
         """
         self.mu = mu
         self.sigma = sigma
 
     def evaluate(self, x):
-        """Evaluate the log-normal probability density function.
+        """Evaluates the log-normal probability density function.
 
-        Args:
-            x: Value at which to evaluate the density. Must be positive.
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density. Must be positive.
 
-        Returns:
-            float: Probability density value at ``x``.
+        Returns
+        -------
+        float
+            The probability density value at ``x``.
         """
         return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((np.log(x) - self.mu) / self.sigma) ** 2)
 
     def sample(self, min_val, max_val, seed=None):
-        """Draw a bounded random sample from the distribution.
+        """Draws a bounded random sample from the distribution.
 
-        Args:
-            min_val: Minimum allowed sampled value.
-            max_val: Maximum allowed sampled value.
-            seed: Optional random seed.
+        Parameters
+        ----------
+        min_val : float
+            Minimum allowed sampled value.
+        max_val : float
+            Maximum allowed sampled value.
+        seed : int, optional, default : None
+            Optional random seed. For reproducibility.
 
-        Returns:
-            float: Sample from the distribution clipped to the given bounds.
+        Returns
+        -------
+        float
+            A sample from the distribution clipped to the given bounds.
         """
         if seed is not None:
             np.random.seed(seed)
@@ -68,45 +89,66 @@ class Normal(object):
     The class provides density evaluation and bounded random sampling for a
     Gaussian distribution parameterized by its mean and standard deviation.
 
-    Attributes:
-        mu: Mean of the normal distribution.
-        sigma: Standard deviation of the normal distribution.
+    ...
+    Attributes
+    ----------
+    mu : float
+        Mean of the normal distribution.
+    sigma : float
+        Standard deviation of the normal distribution.
+
+    Methods
+    -------
+    evaluate(x):
+        Evaluates the probability density function at ``x``.
+    sample(min_val, max_val, seed):
+        Draws a bounded random sample from the distribution.
     """
 
     def __init__(self, mu, sigma):
-        """Initialize a `Normal` distribution.
+        """Constructs all the necessary attributes for the Normal object.
 
-        Args:
-            mu: Mean of the normal distribution.
-            sigma: Standard deviation of the normal distribution.
-
-        Returns:
-            None
+        Parameters
+        ----------
+        mu : float
+            Mean of the normal distribution.
+        sigma : float
+            Standard deviation of the normal distribution.
         """
         self.mu = mu
         self.sigma = sigma
 
     def evaluate(self, x):
-        """Evaluate the normal probability density function.
+        """Evaluates the normal probability density function.
 
-        Args:
-            x: Value at which to evaluate the density.
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density.
 
-        Returns:
-            float: Probability density value at ``x``.
+        Returns
+        -------
+        float
+            The probability density value at ``x``.
         """
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
 
     def sample(self, min_val, max_val, seed=None):
-        """Draw a bounded random sample from the distribution.
+        """Draws a bounded random sample from the distribution.
 
-        Args:
-            min_val: Minimum allowed sampled value.
-            max_val: Maximum allowed sampled value.
-            seed: Optional random seed.
+        Parameters
+        ----------
+        min_val : float
+            Minimum allowed sampled value.
+        max_val : float
+            Maximum allowed sampled value.
+        seed : int, optional, default : None
+            Optional random seed. For reproducibility.
 
-        Returns:
-            float: Sample from the distribution clipped to the given bounds.
+        Returns
+        -------
+        float
+            A sample from the distribution clipped to the given bounds.
         """
         if seed is not None:
             np.random.seed(seed)
@@ -123,34 +165,50 @@ class Gamma:
     The class provides density evaluation and bounded random sampling for a
     Gamma distribution parameterized in rate form.
 
-    Attributes:
-        alpha: Shape parameter.
-        beta: Rate parameter, where ``beta = 1 / scale``.
-        _log_normalizer: Cached log-normalization constant.
+    ...
+    Attributes
+    ----------
+    alpha : float
+        Shape parameter.
+    beta : float
+        Rate parameter, where ``beta = 1 / scale``.
+    _log_normalizer : float
+        Cached log-normalization constant.
+
+    Methods
+    -------
+    evaluate(x):
+        Evaluates the probability density function at ``x``.
+    sample(min_val, max_val, seed):
+        Draws a bounded random sample from the distribution.
     """
 
     def __init__(self, alpha, beta):
-        """Initialize a `Gamma` distribution.
+        """Constructs all the necessary attributes for the Gamma object.
 
-        Args:
-            alpha: Shape parameter.
-            beta: Rate parameter, where ``beta = 1 / scale``.
-
-        Returns:
-            None
+        Parameters
+        ----------
+        alpha : float
+            Shape parameter.
+        beta : float
+            Rate parameter, where ``beta = 1 / scale``.
         """
         self.alpha = alpha
         self.beta = beta  # rate parameterization (beta = 1/scale)
         self._log_normalizer = alpha * np.log(beta) - _gammaln(alpha)
 
     def evaluate(self, x):
-        """Evaluate the Gamma probability density function.
+        """Evaluates the Gamma probability density function.
 
-        Args:
-            x: Value at which to evaluate the density. Must be positive.
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density. Must be positive.
 
-        Returns:
-            float: Probability density value at ``x``. Returns ``0.0`` if
+        Returns
+        -------
+        float
+            The probability density value at ``x``. Returns ``0.0`` if
             ``x <= 0``.
         """
         if x <= 0:
@@ -158,15 +216,21 @@ class Gamma:
         return np.exp(self._log_normalizer + (self.alpha - 1) * np.log(x) - self.beta * x)
 
     def sample(self, min_val, max_val, seed=None):
-        """Draw a bounded random sample from the distribution.
+        """Draws a bounded random sample from the distribution.
 
-        Args:
-            min_val: Minimum allowed sampled value.
-            max_val: Maximum allowed sampled value.
-            seed: Optional random seed.
+        Parameters
+        ----------
+        min_val : float
+            Minimum allowed sampled value.
+        max_val : float
+            Maximum allowed sampled value.
+        seed : int, optional, default : None
+            Optional random seed. For reproducibility.
 
-        Returns:
-            float: Sample from the distribution clipped to the given bounds.
+        Returns
+        -------
+        float
+            A sample from the distribution clipped to the given bounds.
         """
         if seed is not None:
             np.random.seed(seed)
@@ -182,48 +246,69 @@ class Uniform(object):
     The class provides density evaluation and bounded random sampling for a
     uniform distribution over the interval ``[a, b]``.
 
-    Attributes:
-        a: Lower bound of the distribution support.
-        b: Upper bound of the distribution support.
+    ...
+    Attributes
+    ----------
+    a : float
+        Lower bound of the distribution support.
+    b : float
+        Upper bound of the distribution support.
+
+    Methods
+    -------
+    evaluate(x):
+        Evaluates the probability density function at ``x``.
+    sample(min_val, max_val, seed):
+        Draws a bounded random sample from the distribution.
     """
 
     def __init__(self, a, b):
-        """Initialize a `Uniform` distribution.
+        """Constructs all the necessary attributes for the Uniform object.
 
-        Args:
-            a: Lower bound of the distribution support.
-            b: Upper bound of the distribution support.
-
-        Returns:
-            None
+        Parameters
+        ----------
+        a : float
+            Lower bound of the distribution support.
+        b : float
+            Upper bound of the distribution support.
         """
         self.a = a
         self.b = b
 
     def evaluate(self, x):
-        """Evaluate the uniform probability density function.
+        """Evaluates the uniform probability density function.
 
-        Args:
-            x: Value at which to evaluate the density.
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density.
 
-        Returns:
-            float: Probability density value at ``x``. Returns ``0.0`` if
-            ``x`` is outside ``[a, b]``.
+        Returns
+        -------
+        float
+            The probability density value at ``x``. Returns ``0.0`` if ``x`` is
+            outside ``[a, b]``.
         """
         if x < self.a or x > self.b:
             return 0.0
         return 1.0 / (self.b - self.a)
 
     def sample(self, min_val, max_val, seed=None):
-        """Draw a bounded random sample from the distribution.
+        """Draws a bounded random sample from the distribution.
 
-        Args:
-            min_val: Minimum allowed sampled value.
-            max_val: Maximum allowed sampled value.
-            seed: Optional random seed.
+        Parameters
+        ----------
+        min_val : float
+            Minimum allowed sampled value.
+        max_val : float
+            Maximum allowed sampled value.
+        seed : int, optional, default : None
+            Optional random seed. For reproducibility.
 
-        Returns:
-            float: Sample from the distribution clipped to the given bounds.
+        Returns
+        -------
+        float
+            A sample from the distribution clipped to the given bounds.
         """
         if seed is not None:
             np.random.seed(seed)
@@ -231,13 +316,19 @@ class Uniform(object):
 
 @njit_
 def _gammaln(x):
-    """Approximate the natural logarithm of the gamma function.
+    """Approximates the natural logarithm of the gamma function.
 
-    Args:
-        x: Positive input value.
+    Uses the Lanczos approximation.
 
-    Returns:
-        float: Approximation of ``log(Gamma(x))``.
+    Parameters
+    ----------
+    x : float
+        Positive input value.
+
+    Returns
+    -------
+    float
+        An approximation of ``log(Gamma(x))``.
     """
     coeffs = np.array([
          76.18009172947146,

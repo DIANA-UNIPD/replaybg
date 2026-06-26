@@ -10,15 +10,30 @@ class Sensor(ABC):
     :class:`~sensors.vettoretti19_cgm.Vettoretti19CGM`) implement the actual error
     model in :meth:`measure`.
 
-    Attributes:
-        ts: Sample time of the sensor, in integration steps. The replay loop takes a
-            measurement when ``k % ts == 0``.
-        t_offset: Time offset of the sensor (0 when new). Used when a sensor object is
-            shared across multiple replay runs.
-        max_lifetime: Maximum lifetime of the sensor, in integration steps. When it is
-            exceeded the replay loop reconnects a fresh sensor realization.
-        connected_at: Integration step at which the current sensor was connected
-            (utility to manage sensor lifetime across multiple replay calls).
+    ...
+    Attributes
+    ----------
+    ts : int
+        Sample time of the sensor, in integration steps. The replay loop takes a
+        measurement when ``k % ts == 0``.
+    t_offset : int
+        Time offset of the sensor (0 when new). Used when a sensor object is
+        shared across multiple replay runs.
+    max_lifetime : int
+        Maximum lifetime of the sensor, in integration steps. When it is exceeded
+        the replay loop reconnects a fresh sensor realization.
+    connected_at : int
+        Integration step at which the current sensor was connected (utility to
+        manage sensor lifetime across multiple replay calls).
+
+    Methods
+    -------
+    connect_new(connected_at):
+        Connects a fresh sensor by (re)sampling its error realization.
+    measure(value, past_values, t):
+        Produces a measurement from the current and past model outputs.
+    add_offset(to_add):
+        Adds an offset to the sensor life.
     """
 
     def __init__(self):
@@ -35,8 +50,10 @@ class Sensor(ABC):
     def connect_new(self, connected_at=0):
         """Connects a fresh sensor by (re)sampling its error realization.
 
-        Args:
-            connected_at: Integration step at which the sensor is connected.
+        Parameters
+        ----------
+        connected_at : int, optional, default : 0
+            Integration step at which the sensor is connected.
         """
         # Set the offset
         self.t_offset = 0
@@ -46,24 +63,32 @@ class Sensor(ABC):
 
     @abstractmethod
     def measure(self, value: float, past_values, t: float) -> float:
-        """Produce a measurement from the current and past model outputs.
+        """Produces a measurement from the current and past model outputs.
 
-        Args:
-            value: The current model output. This is the value being measured.
-            past_values: The series of past model outputs (``out[:k]``).
-            t: Current time, in days from when the sensor was connected.
+        Parameters
+        ----------
+        value : float
+            The current model output. This is the value being measured.
+        past_values : numpy.ndarray
+            The series of past model outputs (``out[:k]``).
+        t : float
+            Current time, in days from when the sensor was connected.
 
-        Returns:
+        Returns
+        -------
+        float
             The measurement at the current time.
         """
         pass
 
     def add_offset(self, to_add: float) -> None:
-        """Add an offset to the sensor life.
+        """Adds an offset to the sensor life.
 
         Used when the sensor object is shared across multiple replay runs.
 
-        Args:
-            to_add: The offset to add to the sensor life.
+        Parameters
+        ----------
+        to_add : float
+            The offset to add to the sensor life.
         """
         self.t_offset += to_add

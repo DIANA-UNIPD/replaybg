@@ -11,19 +11,25 @@ def to_typed_f64_dict(src=None, *, strict=False) -> Dict:
     ``float64``. It is useful when passing parameter dictionaries into Numba-
     compiled code or APIs that expect typed containers.
 
-    Args:
-        src: A mapping or mapping-like object to convert. If ``None``, an empty
-            typed dictionary is returned.
-        strict: If ``True``, raise ``TypeError`` when a value cannot be cast to
-            ``float64``. If ``False``, invalid entries are skipped silently.
+    Parameters
+    ----------
+    src : mapping, optional, default : None
+        A mapping or mapping-like object to convert. If ``None``, an empty typed
+        dictionary is returned.
+    strict : bool, optional, default : False
+        If ``True``, raise ``TypeError`` when a value cannot be cast to
+        ``float64``. If ``False``, invalid entries are skipped silently.
 
-    Returns:
-        numba.typed.Dict: A typed dictionary with ``str`` keys and ``float64``
-        values.
+    Returns
+    -------
+    numba.typed.Dict
+        A typed dictionary with ``str`` keys and ``float64`` values.
 
-    Raises:
-        TypeError: If ``strict`` is ``True`` and a key/value pair cannot be
-            converted to ``str``/``float64``.
+    Raises
+    ------
+    TypeError
+        If ``strict`` is ``True`` and a key/value pair cannot be converted to
+        ``str``/``float64``.
     """
     out = Dict.empty(key_type=types.unicode_type, value_type=float64)
     if src is None:

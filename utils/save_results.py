@@ -4,18 +4,25 @@ from datetime import datetime
 
 
 def save_results(results: dict, path: str, name: str | None, prefix: str) -> str:
-    """Pickle ``results`` to ``<path>/<name>.pkl``, creating ``path`` if needed.
+    """Pickles ``results`` to ``<path>/<name>.pkl``, creating ``path`` if needed.
 
-    Args:
-        results: The dictionary of objects to persist.
-        path: Directory where the file will be written. Created if missing.
-        name: File name (with or without the ``.pkl`` extension). If ``None``,
-            defaults to ``f"{prefix}_{YYYY_mm_dd}"``.
-        prefix: Prefix used to build the default name when ``name`` is
-            ``None`` (e.g. ``"twin"`` or ``"replay"``).
+    Parameters
+    ----------
+    results : dict
+        The dictionary of objects to persist.
+    path : str
+        Directory where the file will be written. Created if missing.
+    name : str or None
+        File name (with or without the ``.pkl`` extension). If ``None``, defaults
+        to ``f"{prefix}_{YYYY_mm_dd}"``.
+    prefix : str
+        Prefix used to build the default name when ``name`` is ``None`` (e.g.
+        ``"twin"`` or ``"replay"``).
 
-    Returns:
-        str: The full path of the file written.
+    Returns
+    -------
+    str
+        The full path of the file written.
     """
     os.makedirs(path, exist_ok=True)
     if name is None:

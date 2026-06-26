@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
-from utils.numba_dicts import to_typed_f32_dict
+from utils.numba_dicts import to_typed_f64_dict
 
 
 def plot_twinning(
@@ -40,40 +40,52 @@ def plot_twinning(
     The utility is model-agnostic: nothing about the meaning of the output or
     inputs is assumed. Channel names come straight from ``data_to_input``.
 
-    Args:
-        rbg_data: The data object passed to :meth:`ReplayBG.twin` (e.g. a
-            ``MultiMealT1DData``). Must expose ``u``, ``data_to_input``,
-            ``tsteps``, ``yts``, ``y`` and ``y_idxs``.
-        model: A model instance implementing the model interface contract
-            (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
-        theta: The estimated parameters as returned in ``twin()['theta']``. When
-            given, the model is reset with them before simulating. When ``None``,
-            the model is simulated in its current state (e.g. already constructed
-            with ``theta0``).
-        thresholds: Optional reference levels drawn as dashed horizontal lines on
-            the fit subplot.
-        input_groups: Optional list of channel-index groups. Each group becomes
-            one subplot with its channels overlaid. ``None`` plots one channel
-            per subplot, in ``data_to_input`` order.
-        mask_inputs: Optional list of channel indices to hide. Masked channels
-            are dropped from the (default or explicit) ``input_groups`` so they
-            get no subplot; e.g. pass the ``t_hour`` index to skip it.
-        ts_min: Minutes represented by one integration step, used to scale the
-            time axis. Defaults to 1.
-        output_label: Legend label for the simulated fit line.
-        observation_label: Legend label for the observed-data markers.
-        figsize: Optional figure size. Defaults to a height that grows with the
-            number of subplots.
+    Parameters
+    ----------
+    rbg_data : object
+        The data object passed to :meth:`ReplayBG.twin` (e.g. a
+        ``MultiMealT1DData``). Must expose ``u``, ``data_to_input``, ``tsteps``,
+        ``yts``, ``y`` and ``y_idxs``.
+    model : object
+        A model instance implementing the model interface contract
+        (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
+    theta : dict or None, optional, default : None
+        The estimated parameters as returned in ``twin()['theta']``. When given,
+        the model is reset with them before simulating. When ``None``, the model
+        is simulated in its current state (e.g. already constructed with
+        ``theta0``).
+    thresholds : list of float or None, optional, default : None
+        Optional reference levels drawn as dashed horizontal lines on the fit
+        subplot.
+    input_groups : list of list of int or None, optional, default : None
+        Optional list of channel-index groups. Each group becomes one subplot
+        with its channels overlaid. ``None`` plots one channel per subplot, in
+        ``data_to_input`` order.
+    mask_inputs : list of int or None, optional, default : None
+        Optional list of channel indices to hide. Masked channels are dropped
+        from the (default or explicit) ``input_groups`` so they get no subplot;
+        e.g. pass the ``t_hour`` index to skip it.
+    ts_min : float, optional, default : 1.0
+        Minutes represented by one integration step, used to scale the time axis.
+    output_label : str, optional, default : "Fit"
+        Legend label for the simulated fit line.
+    observation_label : str, optional, default : "Data"
+        Legend label for the observed-data markers.
+    figsize : tuple of float or None, optional, default : None
+        Optional figure size. Defaults to a height that grows with the number of
+        subplots.
 
-    Returns:
-        matplotlib Figure.
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The assembled figure.
     """
     inputs = np.asarray(rbg_data.u)
     data_to_input = rbg_data.data_to_input
 
     # --- simulate the fitted model forward (matches the twinner's pass) -------
     if theta is not None:
-        model.reset(to_typed_f32_dict(theta))
+        model.reset(to_typed_f64_dict(theta))
 
     tsteps = int(rbg_data.tsteps)
     output = np.zeros(tsteps)

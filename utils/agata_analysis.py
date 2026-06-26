@@ -28,7 +28,7 @@ from py_agata.py_agata import Agata
 from py_agata.error import rmse, mard, cod, clarke, g_rmse
 from py_agata.utils import glucose_vector_to_dataframe
 
-from utils.numba_dicts import to_typed_f32_dict
+from utils.numba_dicts import to_typed_f64_dict
 from utils.save_results import save_results
 
 
@@ -47,24 +47,33 @@ def analyze_replay(
     ``output`` and, when the replay used a sensor, also on the sensor
     ``measurement`` trace.
 
-    Args:
-        replay_results: The dict returned by :meth:`ReplayBG.replay` (must
-            contain ``output``; ``measurement``/``measurement_time`` are used
-            when present).
-        ts: AGATA glucose sampling cadence in minutes. The ``output`` trace is
-            downsampled to this cadence before analysis. Defaults to 5.
-        integration_ts: Minutes represented by one integration step
-            (``environment.ts``). Used to convert ``ts`` into a downsampling
-            step and to scale the measurement cadence. Defaults to 1.
-        glycemic_target: Glycemic target set forwarded to :class:`py_agata.Agata`.
-        verbose: When ``True``, prints a compact metric summary.
-        path: When given, the analysis is added to ``replay_results`` under the
-            ``analysis`` key and the dict is re-saved to ``<path>/replay_*.pkl``.
-        save_name: File name for the re-saved pickle (see
-            :func:`utils.save_results.save_results`).
+    Parameters
+    ----------
+    replay_results : dict
+        The dict returned by :meth:`ReplayBG.replay` (must contain ``output``;
+        ``measurement``/``measurement_time`` are used when present).
+    ts : int, optional, default : 5
+        AGATA glucose sampling cadence in minutes. The ``output`` trace is
+        downsampled to this cadence before analysis.
+    integration_ts : int, optional, default : 1
+        Minutes represented by one integration step (``environment.ts``). Used to
+        convert ``ts`` into a downsampling step and to scale the measurement
+        cadence.
+    glycemic_target : str, optional, default : "diabetes"
+        Glycemic target set forwarded to :class:`py_agata.Agata`.
+    verbose : bool, optional, default : False
+        When ``True``, prints a compact metric summary.
+    path : str or None, optional, default : None
+        When given, the analysis is added to ``replay_results`` under the
+        ``analysis`` key and the dict is re-saved to ``<path>/replay_*.pkl``.
+    save_name : str or None, optional, default : None
+        File name for the re-saved pickle (see
+        :func:`utils.save_results.save_results`).
 
-    Returns:
-        dict with key ``output`` (the profile of the model output) and, when a
+    Returns
+    -------
+    dict
+        A dict with key ``output`` (the profile of the model output) and, when a
         sensor was used, ``measurement`` (the profile of the sensor trace).
     """
     agata = Agata(glycemic_target=glycemic_target)
@@ -115,33 +124,42 @@ def analyze_twin(
       ``mard``, ``cod``, Clarke EGA zones, ``g_rmse``) against the reference
       CGM that was fitted (``rbg_data.y``).
 
-    Args:
-        twin_results: The dict returned by :meth:`ReplayBG.twin` (must contain
-            ``theta``).
-        rbg_data: The data object passed to :meth:`ReplayBG.twin`. Provides the
-            reference CGM (``y``), the input matrix (``u``), ``tsteps`` and the
-            data sampling stride ``yts``.
-        model: A model instance implementing ``reset(theta_dict)``, ``step(u, t)``
-            and ``output(t)``.
-        integration_ts: Minutes represented by one integration step
-            (``environment.ts``). The AGATA cadence is ``rbg_data.yts *
-            integration_ts``. Defaults to 1.
-        glycemic_target: Glycemic target set forwarded to :class:`py_agata.Agata`.
-        verbose: When ``True``, prints a compact metric summary.
-        path: When given, the analysis is added under the ``analysis`` key and
-            the results (including ``rbg_data``) are re-saved to
-            ``<path>/twin_*.pkl``, preserving the shape ``twin()`` persists.
-        save_name: File name for the re-saved pickle.
+    Parameters
+    ----------
+    twin_results : dict
+        The dict returned by :meth:`ReplayBG.twin` (must contain ``theta``).
+    rbg_data : object
+        The data object passed to :meth:`ReplayBG.twin`. Provides the reference
+        CGM (``y``), the input matrix (``u``), ``tsteps`` and the data sampling
+        stride ``yts``.
+    model : object
+        A model instance implementing ``reset(theta_dict)``, ``step(u, t)`` and
+        ``output(t)``.
+    integration_ts : int, optional, default : 1
+        Minutes represented by one integration step (``environment.ts``). The
+        AGATA cadence is ``rbg_data.yts * integration_ts``.
+    glycemic_target : str, optional, default : "diabetes"
+        Glycemic target set forwarded to :class:`py_agata.Agata`.
+    verbose : bool, optional, default : False
+        When ``True``, prints a compact metric summary.
+    path : str or None, optional, default : None
+        When given, the analysis is added under the ``analysis`` key and the
+        results (including ``rbg_data``) are re-saved to ``<path>/twin_*.pkl``,
+        preserving the shape ``twin()`` persists.
+    save_name : str or None, optional, default : None
+        File name for the re-saved pickle.
 
-    Returns:
-        dict with keys ``profile`` (AGATA profile of the fitted trace) and
+    Returns
+    -------
+    dict
+        A dict with keys ``profile`` (AGATA profile of the fitted trace) and
         ``error`` (the fit-error metric set).
     """
     theta = twin_results["theta"]
 
     # Simulate the fitted model forward (same reset/step/output pass the twinner
     # uses for the likelihood; mirrors utils.plot_twinning).
-    model.reset(to_typed_f32_dict(theta))
+    model.reset(to_typed_f64_dict(theta))
     inputs = np.asarray(rbg_data.u)
     tsteps = int(rbg_data.tsteps)
     output = np.zeros(tsteps)

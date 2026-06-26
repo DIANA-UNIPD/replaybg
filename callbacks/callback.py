@@ -16,6 +16,22 @@ class ReplayCallback:
     Callbacks run in the order they are passed to ``replay()``; each mutates the
     same input vector in place, so later callbacks observe earlier edits. The
     return value of :meth:`action` is ignored.
+
+    ...
+    Attributes
+    ----------
+    name : str
+        Identifies this callback in the action log. Defaults to the class name.
+        Set a distinct ``name`` when using two instances of the same class.
+    rbg_data : object
+        The replay ``rbg_data``, injected before the run starts so callbacks can
+        access data-specific quantities (e.g. ``rbg_data.body_weight``). ``None``
+        until ``replay()`` is called.
+
+    Methods
+    -------
+    action(ctx):
+        Inspects the context and modifies the current-step inputs in place.
     """
 
     #: Identifies this callback in the action log. Defaults to the class name.
@@ -28,9 +44,11 @@ class ReplayCallback:
     rbg_data = None
 
     def action(self, ctx) -> None:
-        """Inspect ``ctx`` and modify the current-step inputs in place.
+        """Inspects ``ctx`` and modifies the current-step inputs in place.
 
-        Args:
-            ctx: The :class:`~callbacks.context.ReplayContext` for the current step.
+        Parameters
+        ----------
+        ctx : ReplayContext
+            The :class:`~callbacks.context.ReplayContext` for the current step.
         """
         raise NotImplementedError

@@ -15,7 +15,36 @@ from numba.typed import Dict
 _worker_args = None
 
 class Twinner():
-    """Estimate model parameters by maximizing a posterior objective.
+    """A class that estimates model parameters by maximizing a posterior objective.
+
+    The twinner performs MAP (maximum a posteriori) estimation: it minimizes the
+    negative log-posterior (``-(log_prior + log_likelihood)``) over the unknown
+    parameters using a multi-start Powell optimisation, optionally parallelised
+    across CPUs with multiprocessing.
+
+    ...
+    Attributes
+    ----------
+    parallelize : bool
+        A boolean that specifies whether to run the multi-start optimisation in
+        parallel.
+    n_jobs : int
+        The number of parallel jobs to use (``-1`` means all available CPUs).
+    n_starts : int
+        The number of multi-start optimisations.
+    verbose : bool
+        A boolean that specifies the verbosity of the twinner.
+    log_history : bool
+        A boolean that specifies whether the optimisation history is recorded.
+    history : dict
+        The recorded optimisation history (only present when ``log_history`` is
+        ``True``), with keys ``theta``, ``log_prior``, ``log_likelihood`` and
+        ``log_posterior``.
+
+    Methods
+    -------
+    twin(model, rbg_data, unknown_parameters_prior):
+        Runs the multi-start MAP estimation and returns the best parameters.
     """
 
     def __init__(self,
@@ -25,7 +54,22 @@ class Twinner():
                  log_history: bool = False,
                  verbose: bool = True
     ):
-        """Initialize a ``Twinner`` instance.
+        """Constructs all the necessary attributes for the Twinner object.
+
+        Parameters
+        ----------
+        parallelize : bool, optional, default : True
+            A boolean that specifies whether to run the multi-start optimisation
+            in parallel using multiprocessing.
+        n_jobs : int or None, optional, default : None
+            The number of parallel jobs to use. If ``None``, all available CPUs
+            are used (stored internally as ``-1``).
+        n_starts : int, optional, default : 64
+            An integer that specifies the number of multi-start optimisations.
+        log_history : bool, optional, default : False
+            A boolean that specifies whether to record the optimisation history.
+        verbose : bool, optional, default : True
+            A boolean that specifies the verbosity of the twinner.
         """
         self.parallelize = parallelize
         self.n_jobs = -1 if n_jobs is None else n_jobs
@@ -41,7 +85,31 @@ class Twinner():
             self.history['log_posterior'] = []
 
     def twin(self, model : Any, rbg_data, unknown_parameters_prior) -> dict:
-        """Run twinning for a model.
+        """Runs the multi-start MAP estimation for a model.
+
+        Builds ``n_starts`` initial guesses by sampling the parameter priors,
+        runs a bounded Powell optimisation of the negative log-posterior from
+        each start (sequentially or in parallel), and selects the start with the
+        lowest objective. Integer parameters are rounded and all parameters are
+        clipped to their bounds before being returned.
+
+        Parameters
+        ----------
+        model : object
+            A model instance being fit, implementing ``reset(theta_dict)``,
+            ``step(u, t)`` and ``output(t)``.
+        rbg_data : object
+            A data object used to compute the likelihood.
+        unknown_parameters_prior : dict
+            A dictionary describing the priors and bounds for each parameter to
+            estimate (keys ``prior``, ``min``, ``max`` and optional ``integer``).
+
+        Returns
+        -------
+        dict
+            A dictionary with keys ``fun`` (the best negative log-posterior
+            value) and ``x`` (the best-fit parameter vector, rounded and clipped
+            to the bounds).
         """
 
         # Set the worker arguments
@@ -145,15 +213,21 @@ class Twinner():
         return ret
 
     def _log_prior(self, model, unknown_parameters_prior):
-        """Compute the log prior probability of the model parameters.
+        """Computes the log prior probability of the model parameters.
 
-        Args:
-            model: Model instance containing the current parameter values.
-            unknown_parameters_prior: Dictionary describing the priors for each
-                parameter. Each prior must provide an ``evaluate(value)`` method.
+        Parameters
+        ----------
+        model : object
+            A model instance containing the current parameter values.
+        unknown_parameters_prior : dict
+            A dictionary describing the priors for each parameter. Each prior
+            must provide an ``evaluate(value)`` method.
 
-        Returns:
-            float: Sum of log prior contributions for all parameters.
+        Returns
+        -------
+        float
+            The sum of log prior contributions for all parameters, or ``-inf``
+            when any parameter is outside its valid range.
         """
         # Iterate over the parameters and compute the log prior
         lp = 0
@@ -168,19 +242,25 @@ class Twinner():
         return lp
 
     def _log_likelihood(self, model, rbg_data):
-        """Compute the log likelihood of the observed data under the model.
+        """Computes the log likelihood of the observed data under the model.
 
-        The model is simulated forward using the input sequence in ``data``.
+        The model is simulated forward using the input sequence in ``rbg_data``.
         The predicted output is then compared against the observed glucose
-        measurements using a Gaussian error model.
+        measurements using a Gaussian error model with a constant coefficient of
+        variation.
 
-        Args:
-            model: Model instance to simulate.
-            rbg_data: Data object containing inputs, output timestamps, and observed
-                glucose values.
+        Parameters
+        ----------
+        model : object
+            A model instance to simulate.
+        rbg_data : object
+            A data object containing inputs, output timestamps, and observed
+            glucose values.
 
-        Returns:
-            float: Log likelihood value for the simulated trajectory.
+        Returns
+        -------
+        float
+            The log likelihood value for the simulated trajectory.
         """
         # Simulate the model forward and get the output
         out = np.zeros(rbg_data.tsteps, )
@@ -208,18 +288,24 @@ class Twinner():
         return -0.5 * np.sum((residuals / sdn) ** 2)
 
     def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
-        """Return the negative log posterior for optimization.
+        """Returns the negative log posterior for optimization.
 
-        Args:
-            theta: Parameter vector in the natural (constrained) parameter space,
-                ordered to match ``unknown_parameters_prior``.
-            model: Model instance being fit.
-            rbg_data: Data object used to compute the likelihood.
-            unknown_parameters_prior: Dictionary describing priors and bounds for
-                the parameters.
+        Parameters
+        ----------
+        theta : numpy.ndarray
+            A parameter vector in the natural (constrained) parameter space,
+            ordered to match ``unknown_parameters_prior``.
+        model : object
+            A model instance being fit.
+        rbg_data : object
+            A data object used to compute the likelihood.
+        unknown_parameters_prior : dict
+            A dictionary describing priors and bounds for the parameters.
 
-        Returns:
-            float: Negative log posterior value.
+        Returns
+        -------
+        float
+            The negative log posterior value.
         """
         # Just return the negative log-posterior
         log_prior, log_likelihood, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
@@ -241,17 +327,23 @@ class Twinner():
         dict (integer parameters are rounded) before ``model.reset``. Bounds are
         enforced by the prior, which returns ``-inf`` outside ``[min, max]``.
 
-        Args:
-            theta: Parameter vector in the natural (constrained) parameter space,
-                ordered to match ``unknown_parameters_prior``.
-            model: Model instance being updated with candidate parameters.
-            rbg_data: Data object used to compute the likelihood.
-            unknown_parameters_prior: Dictionary describing priors and bounds for
-                the parameters.
+        Parameters
+        ----------
+        theta : numpy.ndarray
+            A parameter vector in the natural (constrained) parameter space,
+            ordered to match ``unknown_parameters_prior``.
+        model : object
+            A model instance being updated with candidate parameters.
+        rbg_data : object
+            A data object used to compute the likelihood.
+        unknown_parameters_prior : dict
+            A dictionary describing priors and bounds for the parameters.
 
-        Returns:
-            tuple: ``(log_prior, log_likelihood, log_posterior)``. Any component
-                that is invalid is returned as ``-np.inf``.
+        Returns
+        -------
+        tuple
+            The triple ``(log_prior, log_likelihood, log_posterior)``. Any
+            component that is invalid is returned as ``-np.inf``.
         """
 
         # Create the theta input dictionary (note: order is maintained by construction)
@@ -279,6 +371,26 @@ class Twinner():
         return lp, ll, lp + ll
 
 def _run_optimization(args):
+    """Runs a single Powell optimisation start (module-level worker).
+
+    Defined at module scope so it can be pickled and dispatched to worker
+    processes by multiprocessing. Reads the shared optimisation arguments from
+    the module-global ``_worker_args``.
+
+    Parameters
+    ----------
+    args : tuple
+        The pair ``(i, start_guess)`` where ``i`` is the start index and
+        ``start_guess`` is the initial parameter vector.
+
+    Returns
+    -------
+    tuple
+        The pair ``(result, history)`` where ``result`` is the
+        ``scipy.optimize.OptimizeResult`` of the start and ``history`` is a
+        snapshot of the twinner history (or ``None`` when history logging is
+        disabled).
+    """
     # Unpack the arguments
     i, start_guess = args
 

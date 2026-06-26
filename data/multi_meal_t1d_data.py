@@ -12,48 +12,78 @@ class MultiMealT1DData:
     The class converts a pandas dataframe into the arrays and metadata needed by
     the model and twinning procedure. It extracts time, glucose, insulin, and
     meal information, and organizes them into regularly sampled vectors that can
-    be consumed by the simulator.
+    be consumed by the simulator. This variant handles multiple labelled daily
+    meals (breakfast, lunch, dinner, snack, hypo-treatment).
 
-    Attributes:
-        data_to_input: Mapping from input-channel index to attribute name used to
-            build ``self.u``.
-        u2ss: Mean basal insulin value, used as a steady-state basal estimate.
-        body_weight: Patient body weight used to normalize inputs.
-        yts: Number of simulation integration steps per data sample.
-        tsteps: Total number of simulation steps.
-        tysteps: Number of data-sampling steps represented in the simulation.
-        t_data: Original time values from the dataframe.
-        t_hour: Hour value expanded to simulation resolution.
-        t_min: Minute value expanded to simulation resolution.
-        y: Glucose values as a float array.
-        y_idxs: Indices of non-missing glucose observations.
-        basal: Basal insulin input expanded to simulation resolution.
-        bolus: Bolus insulin input expanded to simulation resolution.
-        bolus_label: Labels associated with bolus events.
-        meal: Meal carbohydrate input expanded to simulation resolution.
-        meal_announcement: Meal announcement signal.
-        meal_type: Labels associated with meal events.
-        u: Combined input matrix used by the model.
+    ...
+    Attributes
+    ----------
+    data_to_input : dict
+        Mapping from input-channel index to attribute name used to build ``self.u``.
+    u2ss : float
+        Mean basal insulin value, used as a steady-state basal estimate.
+    body_weight : float
+        Patient body weight used to normalize inputs.
+    yts : int
+        Number of simulation integration steps per data sample.
+    tsteps : int
+        Total number of simulation steps.
+    tysteps : int
+        Number of data-sampling steps represented in the simulation.
+    t_data : numpy.ndarray
+        Original time values from the dataframe.
+    t_hour : numpy.ndarray
+        Hour value expanded to simulation resolution.
+    t_min : numpy.ndarray
+        Minute value expanded to simulation resolution.
+    y : numpy.ndarray
+        Glucose values as a float array.
+    y_idxs : numpy.ndarray
+        Indices of non-missing glucose observations.
+    basal : numpy.ndarray
+        Basal insulin input expanded to simulation resolution.
+    bolus : numpy.ndarray
+        Bolus insulin input expanded to simulation resolution.
+    bolus_label : numpy.ndarray
+        Labels associated with bolus events.
+    meal : numpy.ndarray
+        Meal carbohydrate input expanded to simulation resolution.
+    meal_announcement : numpy.ndarray
+        Meal announcement signal.
+    meal_type : numpy.ndarray
+        Labels associated with meal events.
+    u : numpy.ndarray
+        Combined input matrix used by the model.
 
+    Methods
+    -------
+    None
     """
 
     def __init__(self, data: pd.DataFrame = None, data_to_input=None, body_weight=100., environment: Environment = None, ):
-        """Initialize a ``T1DData`` instance from a dataframe.
+        """Constructs all the necessary attributes for the data object from a dataframe.
 
-        Args:
-            data: Input dataframe containing the raw replay data.
-            data_to_input: Mapping from input indices to attribute names used to
-                assemble the model input matrix. If ``None``, a default mapping
-                appropriate to this data variant is used.
-            body_weight: Patient body weight used to normalize insulin and meal
-                inputs.
-            environment: Environment object containing simulation settings such
-                as the integration time step.
+        Parameters
+        ----------
+        data : pandas.DataFrame, optional, default : None
+            Input dataframe containing the raw replay data.
+        data_to_input : dict, optional, default : None
+            Mapping from input indices to attribute names used to assemble the
+            model input matrix. If ``None``, a default mapping appropriate to
+            this data variant is used.
+        body_weight : float, optional, default : 100.
+            Patient body weight used to normalize insulin and meal inputs.
+        environment : Environment, optional, default : None
+            Environment object containing simulation settings such as the
+            integration time step.
 
-        Raises:
-            AttributeError: If required dataframe columns are missing.
-            TypeError: If ``data`` is not a pandas dataframe or time values are
-                not in the expected format.
+        Raises
+        ------
+        AttributeError
+            If required dataframe columns are missing.
+        TypeError
+            If ``data`` is not a pandas dataframe or time values are not in the
+            expected format.
         """
         if data_to_input is None:
             self.data_to_input = {0: 'meal_B',
@@ -90,14 +120,18 @@ class MultiMealT1DData:
                      data: pd.DataFrame,
                      environment: Environment = None,
                      ) -> None:
-        """Unpack time information and expand it to simulation resolution.
+        """Unpacks time information and expands it to simulation resolution.
 
-        Args:
-            data: Input dataframe containing a ``t`` column with timestamps.
-            environment: Environment object providing the integration step count.
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Input dataframe containing a ``t`` column with timestamps.
+        environment : Environment, optional, default : None
+            Environment object providing the integration step count.
 
-        Returns:
-            None
+        Returns
+        -------
+        None
         """
         self.tsteps = int(
             (np.array(data.t)[-1].astype(datetime) - np.array(data.t)[0].astype(datetime)).total_seconds() / (
@@ -121,14 +155,17 @@ class MultiMealT1DData:
     def __insulin_setup(self,
                         data: pd.DataFrame,
                         ) -> None:
-        """Unpack insulin measurements into basal and bolus arrays.
+        """Unpacks insulin measurements into basal and bolus arrays.
 
-        Args:
-            data: Input dataframe containing insulin-related columns such as
-                ``basal``, ``bolus``, and ``bolus_label``.
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Input dataframe containing insulin-related columns such as
+            ``basal``, ``bolus``, and ``bolus_label``.
 
-        Returns:
-            None
+        Returns
+        -------
+        None
         """
         self.basal = np.zeros([self.tsteps, ])
         self.bolus = np.zeros([self.tsteps, ])
@@ -154,14 +191,17 @@ class MultiMealT1DData:
     def __meal_setup(self,
                      data: pd.DataFrame,
                      ) -> None:
-        """Unpack meal and carbohydrate announcement information.
+        """Unpacks meal and carbohydrate announcement information.
 
-        Args:
-            data: Input dataframe containing meal-related columns such as
-                ``cho`` and ``cho_label``.
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            Input dataframe containing meal-related columns such as ``cho`` and
+            ``cho_label``.
 
-        Returns:
-            None
+        Returns
+        -------
+        None
         """
         # Initialize the meal vector
         self.meal = np.zeros([self.tsteps, ])
@@ -209,10 +249,11 @@ class MultiMealT1DData:
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
 
     def __setup_u(self):
-        """Build the combined model input matrix from configured inputs.
+        """Builds the combined model input matrix from configured inputs.
 
-        Returns:
-            None
+        Returns
+        -------
+        None
         """
         self.u = np.empty((self.tsteps, len(self.data_to_input.keys())))
         for i in range(len(self.data_to_input.keys())):

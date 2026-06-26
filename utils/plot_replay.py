@@ -32,30 +32,41 @@ def plot_replay(
     inputs, or actions is assumed. Channel names come straight from
     ``data_to_input`` and callback labels from the action log.
 
-    Args:
-        replay_results: The dict returned by :meth:`ReplayBG.replay`. Must
-            contain ``output``, ``input``, ``data_to_input`` and ``actions``;
-            ``measurement`` and ``measurement_time`` are used when present.
-        thresholds: Optional reference levels drawn as dashed horizontal lines
-            on the output subplot.
-        input_groups: Optional list of channel-index groups. Each group becomes
-            one subplot with its channels overlaid. ``None`` plots one channel
-            per subplot, in ``data_to_input`` order.
-        mask_inputs: Optional list of channel indices to hide. Masked channels
-            are dropped from the (default or explicit) ``input_groups`` so they
-            get no subplot; e.g. pass the ``t_hour`` index to skip it.
-        action_field: Name of the scalar field to plot for each callback action.
-            When a record lacks it, the function falls back to the record's lone
-            non-metadata field (anything other than ``k``/``callback``).
-        ts_min: Minutes represented by one integration step, used to scale the
-            time axis. Defaults to 1.
-        output_label: Legend label for the replayed output line.
-        measurement_label: Legend label for the replayed measurement markers.
-        figsize: Optional figure size. Defaults to a height that grows with the
-            number of subplots.
+    Parameters
+    ----------
+    replay_results : dict
+        The dict returned by :meth:`ReplayBG.replay`. Must contain ``output``,
+        ``input``, ``data_to_input`` and ``actions``; ``measurement`` and
+        ``measurement_time`` are used when present.
+    thresholds : list of float or None, optional, default : None
+        Optional reference levels drawn as dashed horizontal lines on the output
+        subplot.
+    input_groups : list of list of int or None, optional, default : None
+        Optional list of channel-index groups. Each group becomes one subplot
+        with its channels overlaid. ``None`` plots one channel per subplot, in
+        ``data_to_input`` order.
+    mask_inputs : list of int or None, optional, default : None
+        Optional list of channel indices to hide. Masked channels are dropped
+        from the (default or explicit) ``input_groups`` so they get no subplot;
+        e.g. pass the ``t_hour`` index to skip it.
+    action_field : str, optional, default : "u"
+        Name of the scalar field to plot for each callback action. When a record
+        lacks it, the function falls back to the record's lone non-metadata field
+        (anything other than ``k``/``callback``).
+    ts_min : float, optional, default : 1.0
+        Minutes represented by one integration step, used to scale the time axis.
+    output_label : str, optional, default : "Output"
+        Legend label for the replayed output line.
+    measurement_label : str, optional, default : "Measurement"
+        Legend label for the replayed measurement markers.
+    figsize : tuple of float or None, optional, default : None
+        Optional figure size. Defaults to a height that grows with the number of
+        subplots.
 
-    Returns:
-        matplotlib Figure.
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The assembled figure.
     """
     output = np.asarray(replay_results["output"])
     inputs = np.asarray(replay_results["input"])
@@ -160,10 +171,23 @@ def plot_replay(
 
 
 def _action_value(record: dict, action_field: str):
-    """Return the scalar to plot for an action record.
+    """Returns the scalar to plot for an action record.
 
     Prefers ``action_field``; otherwise falls back to the record's single
     non-metadata field so the utility stays agnostic to callback internals.
+
+    Parameters
+    ----------
+    record : dict
+        A single action record from the replay action log.
+    action_field : str
+        The preferred field name to read from the record.
+
+    Returns
+    -------
+    float or None
+        The scalar value to plot, or ``None`` when it cannot be resolved
+        unambiguously.
     """
     if action_field in record:
         return record[action_field]

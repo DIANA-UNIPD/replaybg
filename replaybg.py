@@ -9,7 +9,27 @@ from utils.save_results import save_results
 
 
 class ReplayBG:
-    """Core class of ReplayBG.
+    """A class that represents the core entry point of the ReplayBG framework.
+
+    ReplayBG is a digital-twin framework for Type 1 Diabetes glucose dynamics.
+    It fits a physiological model to recorded data (the twinning step, exposed by
+    :meth:`twin`) and then simulates counterfactual scenarios with the fitted
+    model (the replay step, exposed by :meth:`replay`).
+
+    ...
+    Attributes
+    ----------
+    environment : Environment
+        An Environment object collecting the hyperparameters (integration time,
+        random seed, plot mode, verbosity) shared by the twinning and replay
+        procedures.
+
+    Methods
+    -------
+    twin(rbg_data, model, unknown_parameters_prior, ...):
+        Runs the ReplayBG twinning (model identification) procedure.
+    replay(rbg_data, model, theta, ...):
+        Runs the ReplayBG replay (forward simulation) procedure.
     """
 
     def __init__(self,
@@ -18,6 +38,17 @@ class ReplayBG:
                  plot_mode: bool = True, verbose: bool = True
                  ):
         """Constructs all the necessary attributes for the ReplayBG object.
+
+        Parameters
+        ----------
+        ts : int, optional, default : 1
+            An integer that specifies the integration time (in minutes).
+        seed : int, optional, default : 1
+            An integer that specifies the random seed. For reproducibility.
+        plot_mode : bool, optional, default : True
+            A boolean that specifies whether to show the plot of the results or not.
+        verbose : bool, optional, default : True
+            A boolean that specifies the verbosity of ReplayBG.
         """
 
         # TODO: Validate input
@@ -36,11 +67,52 @@ class ReplayBG:
              log_history: bool = False,
              path: str | None = None, save_name: str | None = None,
              ) -> Dict:
-        """Runs ReplayBG twinning procedure.
+        """Runs the ReplayBG twinning procedure.
+
+        Estimates the unknown model parameters ``theta`` from the recorded data
+        via MAP estimation (multi-start Powell optimisation), delegating the work
+        to a :class:`~twinner.twinner.Twinner`.
 
         If ``path`` is provided, the twinning results (``theta``, ``history`` and
         ``rbg_data``) are pickled to ``<path>/<name>.pkl``. When ``name`` is
         omitted it defaults to ``twin_YYYY_mm_dd.pkl``.
+
+        Parameters
+        ----------
+        rbg_data : object
+            A data object (e.g. ``MultiMealT1DData``) holding the inputs, output
+            timestamps and observed glucose values consumed by the model.
+        model : object, optional, default : None
+            A model instance implementing the model interface contract
+            (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
+        unknown_parameters_prior : dict, optional, default : None
+            A dictionary defining which parameters to estimate. Each entry maps a
+            parameter name to a dict with keys ``prior`` (a distribution with
+            ``evaluate`` and ``sample``), ``min``, ``max`` and optional
+            ``integer``.
+        n_starts : int, optional, default : 64
+            An integer that specifies the number of multi-start optimisations.
+        parallelize : bool, optional, default : False
+            A boolean that specifies whether to run the multi-start optimisation
+            in parallel using multiprocessing.
+        n_jobs : int or None, optional, default : None
+            The number of parallel jobs to use. If ``None``, all available CPUs
+            are used.
+        log_history : bool, optional, default : False
+            A boolean that specifies whether to record the optimisation history.
+        path : str or None, optional, default : None
+            The directory where the results are pickled. If ``None``, results are
+            not saved to disk.
+        save_name : str or None, optional, default : None
+            The file name used when saving the results. If ``None``, it defaults
+            to ``twin_YYYY_mm_dd.pkl``.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys ``theta`` (the estimated parameters as a
+            name->value mapping) and ``history`` (the optimisation history when
+            ``log_history`` is ``True``, otherwise ``None``).
         """
         # TODO: validate the inputs
 
@@ -91,15 +163,44 @@ class ReplayBG:
         ``rbg_data``) are pickled to ``<path>/<name>.pkl``. When ``name`` is
         omitted it defaults to ``replay_YYYY_mm_dd.pkl``.
 
-        Returns:
-            dict with keys:
-                ``output``: predicted interstitial glucose at integration resolution.
-                ``input``: applied inputs at integration resolution, shape (tsteps, n).
-                ``data_to_input``: channel index -> name mapping.
-                ``actions``: flat list of action records logged by callbacks.
-                ``measurement``: (only with a sensor) sensor samples at sensor cadence.
-                ``measurement_time``: (only with a sensor) integration-step index of
-                    each sample.
+        Parameters
+        ----------
+        rbg_data : object
+            A data object (e.g. ``MultiMealT1DData``) holding the inputs to be
+            replayed through the model.
+        model : object, optional, default : None
+            A model instance implementing the model interface contract
+            (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
+        theta : dict, optional, default : None
+            The model parameters to use for the forward simulation, typically the
+            estimated parameters returned by :meth:`twin`.
+        callbacks : list or None, optional, default : None
+            A list of :class:`~callbacks.callback.ReplayCallback` control policies
+            invoked before each model step. Each may modify the current-step
+            inputs to implement a closed-loop policy.
+        sensor : object, optional, default : None
+            An optional :class:`~sensors.sensor.Sensor` that observes the model
+            output and produces a (noisy, sub-sampled) measurement at its own
+            cadence. When ``None``, callbacks observe the true model output.
+        path : str or None, optional, default : None
+            The directory where the results are pickled. If ``None``, results are
+            not saved to disk.
+        save_name : str or None, optional, default : None
+            The file name used when saving the results. If ``None``, it defaults
+            to ``replay_YYYY_mm_dd.pkl``.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys:
+            ``output`` (predicted interstitial glucose at integration resolution),
+            ``input`` (applied inputs at integration resolution, shape
+            ``(tsteps, n)``),
+            ``data_to_input`` (channel index -> name mapping),
+            ``actions`` (flat list of action records logged by callbacks) and,
+            only when a sensor is supplied,
+            ``measurement`` (sensor samples at sensor cadence) and
+            ``measurement_time`` (integration-step index of each sample).
         """
         # TODO: validate the inputs
 

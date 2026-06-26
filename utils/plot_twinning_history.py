@@ -3,17 +3,22 @@ import matplotlib.pyplot as plt
 
 
 def plot_twinning_history(history: dict, param_names: list[str] | None = None) -> plt.Figure:
-    """Plot optimization history from a twinning run.
+    """Plots the optimization history from a twinning run.
 
-    Args:
-        history: Dict with keys 'theta', 'log_prior', 'log_likelihood',
-                 'log_posterior'. Each value is a list of recorded values per
-                 function evaluation. 'theta' entries are numpy arrays.
-        param_names: Optional list of parameter names for the theta legend.
-                     Defaults to 'theta_0', 'theta_1', ...
+    Parameters
+    ----------
+    history : dict
+        Dict with keys ``theta``, ``log_prior``, ``log_likelihood`` and
+        ``log_posterior``. Each value is a list of recorded values per function
+        evaluation. ``theta`` entries are numpy arrays.
+    param_names : list of str or None, optional, default : None
+        Optional list of parameter names for the theta legend. Defaults to
+        ``theta_0``, ``theta_1``, ...
 
-    Returns:
-        matplotlib Figure.
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The assembled figure.
     """
     thetas = np.array(history['theta'])          # (n_evals, n_params)
     log_prior = np.array(history['log_prior'])

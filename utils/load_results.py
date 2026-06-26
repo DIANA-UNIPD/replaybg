@@ -3,17 +3,22 @@ import pickle
 
 
 def load_results(path: str, name: str, prefix: str) -> dict:
-    """Load results previously pickled by :func:`save_results`.
+    """Loads results previously pickled by :func:`save_results`.
 
-    Args:
-        path: Directory where the file lives.
-        name: File name (with or without the ``.pkl`` extension), matching the
-            ``name`` passed to :func:`save_results`.
-        prefix: Prefix used when the file was saved (e.g. ``"twin"`` or
-            ``"replay"``).
+    Parameters
+    ----------
+    path : str
+        Directory where the file lives.
+    name : str
+        File name (with or without the ``.pkl`` extension), matching the ``name``
+        passed to :func:`save_results`.
+    prefix : str
+        Prefix used when the file was saved (e.g. ``"twin"`` or ``"replay"``).
 
-    Returns:
-        dict: The unpickled results dictionary.
+    Returns
+    -------
+    dict
+        The unpickled results dictionary.
     """
     if not name.endswith('.pkl'):
         name += '.pkl'
