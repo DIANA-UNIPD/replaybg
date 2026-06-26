@@ -14,6 +14,7 @@ from replaybg import ReplayBG
 from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
 from utils.numba_dicts import to_typed_f32_dict
+from utils.plot_replay import plot_replay
 
 
 if __name__ == '__main__':
@@ -43,10 +44,9 @@ if __name__ == '__main__':
     analyze_replay(out, ts=5, verbose=rbg.environment.verbose,
                    path=save_folder, save_name=save_name)
 
-    # Plot the measured glucose against the replayed output
-    plt.plot(rbg_data.y, label='measured')
-    plt.plot(out["output"][0::rbg_data.yts], label='replay')
-    plt.ylabel('glucose [mg/dL]')
-    plt.xlabel('sample')
-    plt.legend()
+    # Plot the replayed output (with thresholds) and the inputs that drove it.
+    # Hide the t_hour channel.
+    mask_inputs = [i for i, name in out["data_to_input"].items() if name == 't_hour']
+    fig = plot_replay(out, thresholds=[70, 180], mask_inputs=mask_inputs)
+    fig.show()
     plt.show()

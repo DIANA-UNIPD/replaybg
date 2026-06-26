@@ -15,6 +15,7 @@ from model.multi_meal_t1d import MultiMealT1DModel
 from replaybg import ReplayBG
 from callbacks import CorrectionBolus, HypoTreatment
 from sensors import Vettoretti19CGM
+from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
 from utils.numba_dicts import to_typed_f32_dict
 
@@ -52,9 +53,21 @@ if __name__ == '__main__':
                             callbacks=[correction_bolus_callback, hypotreatment_callback],
                             sensor=sensor)
 
+    # Analyze both replays with AGATA so the effect of the control policy is
+    # visible in the glycemic metrics (the controlled run also analyzes the
+    # noisy sensor measurement trace).
+    analyze_replay(baseline, ts=5, verbose=rbg.environment.verbose,
+                   path=save_folder, save_name='baseline')
+    analyze_replay(controlled, ts=5, verbose=rbg.environment.verbose,
+                   path=save_folder, save_name='controlled')
+
     # Exhaustive log of what the callbacks did, as a tidy table
     actions = pd.DataFrame(controlled['actions'])
     print(actions)
-    plot_replay(controlled)
-    fig = plot_replay(controlled, thresholds=[70, 180])
-    fig.savefig("replay.png")
+
+    # Plot the controlled replay: output + measurement, the inputs that drove it,
+    # and the callback actions. Hide the t_hour channel.
+    mask_inputs = [i for i, name in controlled["data_to_input"].items() if name == 't_hour']
+    fig = plot_replay(controlled, thresholds=[70, 180], mask_inputs=mask_inputs)
+    fig.show()
+    plt.show()

@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
 from utils.numba_dicts import to_typed_f32_dict
@@ -10,6 +11,7 @@ def plot_twinning(
     theta: dict | None = None,
     thresholds: list[float] | None = None,
     input_groups: list[list[int]] | None = None,
+    mask_inputs: list[int] | None = None,
     ts_min: float = 1.0,
     output_label: str = "Fit",
     observation_label: str = "Data",
@@ -53,6 +55,9 @@ def plot_twinning(
         input_groups: Optional list of channel-index groups. Each group becomes
             one subplot with its channels overlaid. ``None`` plots one channel
             per subplot, in ``data_to_input`` order.
+        mask_inputs: Optional list of channel indices to hide. Masked channels
+            are dropped from the (default or explicit) ``input_groups`` so they
+            get no subplot; e.g. pass the ``t_hour`` index to skip it.
         ts_min: Minutes represented by one integration step, used to scale the
             time axis. Defaults to 1.
         output_label: Legend label for the simulated fit line.
@@ -80,8 +85,18 @@ def plot_twinning(
     t = np.arange(tsteps) * ts_min
 
     # --- resolve the subplot layout ------------------------------------------
+    # A distinct color per input channel, keyed by its global index so the same
+    # channel reads the same wherever it appears (and survives masking).
+    all_idxs = sorted(data_to_input.keys())
+    cmap = plt.get_cmap("tab20" if len(all_idxs) > 10 else "tab10")
+    input_colors = {idx: mcolors.to_hex(cmap(i % cmap.N)) for i, idx in enumerate(all_idxs)}
+
+    masked = set(mask_inputs or [])
     if input_groups is None:
-        input_groups = [[idx] for idx in sorted(data_to_input.keys())]
+        input_groups = [[idx] for idx in all_idxs if idx not in masked]
+    else:
+        input_groups = [[idx for idx in group if idx not in masked] for group in input_groups]
+        input_groups = [group for group in input_groups if group]
 
     n_rows = 1 + len(input_groups)
     if figsize is None:
@@ -115,12 +130,11 @@ def plot_twinning(
     # Inputs are typically sparse impulses (boluses, meals) held over a sample
     # window, so they read best as stems at the non-zero steps rather than as a
     # dense line. Only non-zero values are stemmed to avoid clutter.
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     for row, group in enumerate(input_groups, start=1):
         ax = axes[row]
-        for j, idx in enumerate(group):
+        for idx in group:
             name = data_to_input.get(idx, f"input_{idx}")
-            color = colors[j % len(colors)]
+            color = input_colors[idx]
             channel = inputs[:, idx]
             nz = np.flatnonzero(channel)
             if nz.size:

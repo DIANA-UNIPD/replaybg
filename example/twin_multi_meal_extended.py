@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 from data.multi_meal_extended_t1d_data import MultiMealExtendedT1DData
 from model.multi_meal_extended_t1d import MultiMealExtendedT1DModel
 from distributions import Normal, Gamma, LogNormal, Uniform
+from utils.agata_analysis import analyze_twin
+from utils.plot_twinning import plot_twinning
 from utils.plot_twinning_history import plot_twinning_history
 from replaybg import ReplayBG
 
@@ -79,8 +81,20 @@ if __name__ == '__main__':
                       log_history=False,
                       path=save_folder, save_name=save_name)
 
-    print(result['theta'])
+    # Analyze the fit with AGATA (glycemic profile of the fitted trace + the
+    # fit-error metrics vs. the reference CGM) and fold the metrics back into
+    # the saved twin_<save_name>.pkl (adds an 'analysis' key).
+    analyze_twin(result, rbg_data, model, verbose=rbg.environment.verbose,
+                 path=save_folder, save_name=save_name)
+
+    # Plot the twinning fit: simulated model output (with estimated theta) vs the
+    # observed data, plus the inputs that drove the fit. Hide the t_hour channel.
+    mask_inputs = [i for i, name in rbg_data.data_to_input.items() if name == 't_hour']
+    fig = plot_twinning(rbg_data, model, theta=result['theta'],
+                        thresholds=[70, 180], mask_inputs=mask_inputs)
+    fig.show()
 
     if result['history'] is not None:
         plot_twinning_history(result['history'], param_names=list(unknown_parameters_prior.keys()))
-        plt.show()
+
+    plt.show()
