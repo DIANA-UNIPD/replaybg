@@ -25,8 +25,8 @@ class SingleMealT1DData:
         t_data: Original time values from the dataframe.
         t_hour: Hour value expanded to simulation resolution.
         t_min: Minute value expanded to simulation resolution.
-        glucose: Glucose values as a float array.
-        glucose_idxs: Indices of non-missing glucose observations.
+        y: Glucose values as a float array.
+        y_idxs: Indices of non-missing glucose observations.
         basal: Basal insulin input expanded to simulation resolution.
         bolus: Bolus insulin input expanded to simulation resolution.
         bolus_label: Labels associated with bolus events.
@@ -43,8 +43,8 @@ class SingleMealT1DData:
         Args:
             data: Input dataframe containing the raw replay data.
             data_to_input: Mapping from input indices to attribute names used to
-                assemble the model input matrix. If ``None``, the default mapping
-                is ``{0: 'meal', 1: 'bolus', 2: 'basal'}``.
+                assemble the model input matrix. If ``None``, a default mapping
+                appropriate to this data variant is used.
             body_weight: Patient body weight used to normalize insulin and meal
                 inputs.
             environment: Environment object containing simulation settings such
@@ -107,7 +107,7 @@ class SingleMealT1DData:
 
         for t in range(data.shape[0]):
             self.t_hour[(t * self.yts):((t + 1) * self.yts)] = t_h[t]
-            self.t_min[(t * self.yts):((t + 1) * self.yts)] = np.arange(t_m[t], t_m[t] + self.yts)
+            self.t_min[(t * self.yts):((t + 1) * self.yts)] = np.arange(t_m[t], t_m[t] + self.yts) % 60
 
     def __insulin_setup(self,
                         data: pd.DataFrame,
@@ -125,9 +125,6 @@ class SingleMealT1DData:
         self.bolus = np.zeros([self.tsteps, ])
         self.bolus_label = np.empty([self.tsteps, ], dtype=str)
 
-        self.bolus_data = []
-        self.basal_data = []
-
         self.bolus_data = data.bolus.values
 
         # Find the boluses
@@ -141,7 +138,7 @@ class SingleMealT1DData:
 
         self.basal_data = data.basal.values
         # Set the basal vector
-        for time in range(0, np.size(np.arange(0, self.tsteps, self.yts))):
+        for time in range(self.tysteps):
             self.basal[(time * self.yts): ((time + 1) * self.yts)] = \
                 data['basal'][time] * (1000 / self.body_weight)  # mU/(kg*min)
 
@@ -165,8 +162,6 @@ class SingleMealT1DData:
 
         # Initialize the meal type vector
         self.meal_type = np.empty([self.tsteps, ], dtype=str)
-
-        self.meal = np.zeros([self.tsteps, ])
 
         self.meal_data = data.cho.values
 

@@ -1,7 +1,7 @@
 import numpy as np
 from numba import float64
 
-from environment.config import jitclass_, njit_
+from environment import jitclass_, njit_
 
 @jitclass_([
     ("mu", float64),
@@ -228,52 +228,6 @@ class Uniform(object):
         if seed is not None:
             np.random.seed(seed)
         return min(max(np.random.uniform(self.a, self.b), min_val), max_val)
-
-@njit_
-def to_constrained(x, a=0, b=1):
-    """Map an unconstrained value to a bounded interval.
-
-    Args:
-        x: Value in unconstrained space.
-        a: Lower bound of the constrained interval.
-        b: Upper bound of the constrained interval.
-
-    Returns:
-        float: Value mapped into the interval ``[a, b]``.
-    """
-    return a + (b - a) / (1. + np.exp(-x))
-
-
-@njit_
-def to_unconstrained(x, a, b):
-    """Map a bounded value to unconstrained space.
-
-    Args:
-        x: Value in constrained space.
-        a: Lower bound of the constrained interval.
-        b: Upper bound of the constrained interval.
-
-    Returns:
-        float: Value mapped to unconstrained space.
-    """
-    t = (x - a) / (b - a)
-    return np.log(t / (1 - t))
-
-
-@njit_
-def log_jacobian_single(x, a, b):
-    """Compute the log-Jacobian term for the bounded transform.
-
-    Args:
-        x: Value in unconstrained space.
-        a: Lower bound of the constrained interval.
-        b: Upper bound of the constrained interval.
-
-    Returns:
-        float: Log-Jacobian contribution.
-    """
-    s = 1 / (1 + np.exp(-x))
-    return np.log((b - a) * s * (1 - s))
 
 @njit_
 def _gammaln(x):

@@ -69,16 +69,15 @@ class ReplayBG:
                theta: Dict = None,
                callbacks: list | None = None,
                sensor: object = None,
-               parallelize: bool = False, n_processes: int | None = None,
                path: str | None = None, save_name: str | None = None,
                ) -> Dict:
         """Runs ReplayBG replay procedure.
 
         Replays the recorded inputs through the model, optionally letting
         user-supplied control policies act at every integration minute. Each
-        ``callback`` (a :class:`~control.callback.ReplayCallback`) is invoked
+        ``callback`` (a :class:`~callbacks.callback.ReplayCallback`) is invoked
         before the model steps and may modify the inputs for the current step via
-        the :class:`~control.context.ReplayContext` it receives.
+        the :class:`~callbacks.context.ReplayContext` it receives.
 
         An optional ``sensor`` (a :class:`~sensors.sensor.Sensor`) observes the model
         output and produces a measurement of it at its own cadence (``sensor.ts``). The

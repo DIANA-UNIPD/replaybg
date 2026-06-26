@@ -211,7 +211,8 @@ class Twinner():
         """Return the negative log posterior for optimization.
 
         Args:
-            theta: Parameter vector in unconstrained space.
+            theta: Parameter vector in the natural (constrained) parameter space,
+                ordered to match ``unknown_parameters_prior``.
             model: Model instance being fit.
             rbg_data: Data object used to compute the likelihood.
             unknown_parameters_prior: Dictionary describing priors and bounds for
@@ -235,12 +236,14 @@ class Twinner():
     def _log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
         """Compute log-prior, log-likelihood, and log-posterior in one model pass.
 
-        The input parameter vector is assumed to be in unconstrained space.
-        Parameters are mapped back to constrained values before updating the
-        model.
+        The parameter vector is used directly in the natural (constrained)
+        parameter space: each entry is written into the model's typed parameter
+        dict (integer parameters are rounded) before ``model.reset``. Bounds are
+        enforced by the prior, which returns ``-inf`` outside ``[min, max]``.
 
         Args:
-            theta: Parameter vector in unconstrained space.
+            theta: Parameter vector in the natural (constrained) parameter space,
+                ordered to match ``unknown_parameters_prior``.
             model: Model instance being updated with candidate parameters.
             rbg_data: Data object used to compute the likelihood.
             unknown_parameters_prior: Dictionary describing priors and bounds for

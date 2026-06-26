@@ -31,6 +31,6 @@ class ReplayCallback:
         """Inspect ``ctx`` and modify the current-step inputs in place.
 
         Args:
-            ctx: The :class:`~control.context.ReplayContext` for the current step.
+            ctx: The :class:`~callbacks.context.ReplayContext` for the current step.
         """
         raise NotImplementedError

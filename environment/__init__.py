@@ -8,14 +8,10 @@ class Environment:
     ...
     Attributes
     ----------
-    blueprint: str, {'single-meal', 'multi-meal'}
-            A string that specifies the blueprint to be used to create the digital twin.
-    yts: int
-        An integer that specifies the data sampling time (in minutes).
-
+    ts : int
+        An integer that specifies the integration time (in minutes).
     seed : int
         An integer that specifies the random seed. For reproducibility.
-
     plot_mode : bool
         A boolean that specifies whether to show the plot of the results or not.
     verbose : bool
@@ -38,12 +34,10 @@ class Environment:
         Parameters
         ----------
 
-        ts: int, optional, default : 1
+        ts : int, optional, default : 1
             An integer that specifies the integration time (in minutes).
-
-        seed : int, optional, default : 1
+        seed : int, optional, default : 42
             An integer that specifies the random seed. For reproducibility.
-
         plot_mode : boolean, optional, default : True
             A boolean that specifies whether to show the plot of the results or not.
         verbose : boolean, optional, default : True
