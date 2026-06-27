@@ -1,7 +1,11 @@
+import math
+
 import numpy as np
 from numba import float64
 
 from environment import jitclass_, njit_
+
+_SQRT2 = math.sqrt(2.0)
 
 @jitclass_([
     ("mu", float64),
@@ -57,6 +61,23 @@ class LogNormal(object):
             The probability density value at ``x``.
         """
         return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((np.log(x) - self.mu) / self.sigma) ** 2)
+
+    def cdf(self, x):
+        """Evaluates the log-normal cumulative distribution function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the CDF.
+
+        Returns
+        -------
+        float
+            The cumulative probability at ``x``. Returns ``0.0`` if ``x <= 0``.
+        """
+        if x <= 0:
+            return 0.0
+        return 0.5 * (1.0 + math.erf((np.log(x) - self.mu) / (self.sigma * _SQRT2)))
 
     def sample(self, min_val, max_val, seed=None):
         """Draws a bounded random sample from the distribution.
@@ -132,6 +153,21 @@ class Normal(object):
             The probability density value at ``x``.
         """
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
+
+    def cdf(self, x):
+        """Evaluates the normal cumulative distribution function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the CDF.
+
+        Returns
+        -------
+        float
+            The cumulative probability at ``x``.
+        """
+        return 0.5 * (1.0 + math.erf((x - self.mu) / (self.sigma * _SQRT2)))
 
     def sample(self, min_val, max_val, seed=None):
         """Draws a bounded random sample from the distribution.
@@ -215,6 +251,25 @@ class Gamma:
             return 0.0
         return np.exp(self._log_normalizer + (self.alpha - 1) * np.log(x) - self.beta * x)
 
+    def cdf(self, x):
+        """Evaluates the Gamma cumulative distribution function.
+
+        Uses the regularized lower incomplete gamma function ``P(alpha, beta*x)``.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the CDF.
+
+        Returns
+        -------
+        float
+            The cumulative probability at ``x``. Returns ``0.0`` if ``x <= 0``.
+        """
+        if x <= 0:
+            return 0.0
+        return _gammainc_lower_reg(self.alpha, self.beta * x)
+
     def sample(self, min_val, max_val, seed=None):
         """Draws a bounded random sample from the distribution.
 
@@ -293,6 +348,25 @@ class Uniform(object):
             return 0.0
         return 1.0 / (self.b - self.a)
 
+    def cdf(self, x):
+        """Evaluates the uniform cumulative distribution function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the CDF.
+
+        Returns
+        -------
+        float
+            The cumulative probability at ``x``, clipped to ``[0, 1]``.
+        """
+        if x <= self.a:
+            return 0.0
+        if x >= self.b:
+            return 1.0
+        return (x - self.a) / (self.b - self.a)
+
     def sample(self, min_val, max_val, seed=None):
         """Draws a bounded random sample from the distribution.
 
@@ -346,3 +420,65 @@ def _gammaln(x):
         y += 1.0
         ser += c / y
     return -tmp + np.log(2.5066282746310005 * ser / x)
+
+@njit_
+def _gammainc_lower_reg(a, x):
+    """Regularized lower incomplete gamma function ``P(a, x)``.
+
+    Numba does not provide ``scipy.special.gammainc``, so this implements the
+    standard Numerical Recipes split: a series expansion for ``x < a + 1`` and a
+    continued-fraction expansion (giving the upper part ``Q = 1 - P``) for
+    ``x >= a + 1``. Reuses :func:`_gammaln` for the normalization.
+
+    Parameters
+    ----------
+    a : float
+        Shape parameter (must be positive).
+    x : float
+        Upper integration limit (must be non-negative).
+
+    Returns
+    -------
+    float
+        ``P(a, x)`` in ``[0, 1]``.
+    """
+    if x <= 0.0:
+        return 0.0
+
+    gln = _gammaln(a)
+
+    if x < a + 1.0:
+        # Series expansion for P(a, x).
+        ap = a
+        term = 1.0 / a
+        total = term
+        for _ in range(1000):
+            ap += 1.0
+            term *= x / ap
+            total += term
+            if abs(term) < abs(total) * 1e-15:
+                break
+        return total * np.exp(-x + a * np.log(x) - gln)
+
+    # Continued-fraction expansion for Q(a, x) = 1 - P(a, x) (Lentz's method).
+    tiny = 1e-300
+    b = x + 1.0 - a
+    c = 1.0 / tiny
+    d = 1.0 / b
+    h = d
+    for i in range(1, 1000):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < tiny:
+            d = tiny
+        c = b + an / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-15:
+            break
+    q = np.exp(-x + a * np.log(x) - gln) * h
+    return 1.0 - q

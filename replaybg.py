@@ -62,6 +62,7 @@ class ReplayBG:
     def twin(self, rbg_data,
              model: object = None,
              unknown_parameters_prior: Dict = None,
+             correlations: Dict = None,
              n_starts: int = 64,
              parallelize: bool = False, n_jobs: int | None = None,
              log_history: bool = False,
@@ -90,6 +91,15 @@ class ReplayBG:
             parameter name to a dict with keys ``prior`` (a distribution with
             ``evaluate`` and ``sample``), ``min``, ``max`` and optional
             ``integer``.
+        correlations : dict, optional, default : None
+            Optional pairwise prior correlations between parameters, specified as
+            ``{(name_a, name_b): rho}`` with ``rho`` in ``[-1, 1]`` (unlisted
+            pairs default to 0). When provided, the joint prior becomes a
+            Gaussian copula over the named parameters: their marginals stay
+            exactly as declared in ``unknown_parameters_prior`` and only the
+            dependence structure is added. Correlated parameters must use a
+            distribution that provides a ``cdf`` method. When ``None`` the
+            parameters are treated as independent (the previous behaviour).
         n_starts : int, optional, default : 64
             An integer that specifies the number of multi-start optimisations.
         parallelize : bool, optional, default : False
@@ -111,7 +121,8 @@ class ReplayBG:
         -------
         dict
             A dictionary with keys ``theta`` (the estimated parameters as a
-            name->value mapping) and ``history`` (the optimisation history when
+            name->value mapping), ``correlations`` (the prior correlations used,
+            or ``None``) and ``history`` (the optimisation history when
             ``log_history`` is ``True``, otherwise ``None``).
         """
         # TODO: validate the inputs
@@ -123,10 +134,12 @@ class ReplayBG:
         # Run the twinning procedure
         theta_estimated = twinner.twin(model=model,
                                        rbg_data=rbg_data,
-                                       unknown_parameters_prior=unknown_parameters_prior)
+                                       unknown_parameters_prior=unknown_parameters_prior,
+                                       correlations=correlations)
 
         ret = {
             'theta': dict(zip(unknown_parameters_prior.keys(), theta_estimated['x'])),
+            'correlations': correlations,
             'history': twinner.history if log_history else None,
         }
 

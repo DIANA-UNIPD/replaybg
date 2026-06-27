@@ -10,6 +10,7 @@ from multiprocessing import freeze_support
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+from statsmodels.graphics import correlation
 
 from data.multi_meal_t1d_data import MultiMealT1DData
 from model.multi_meal_t1d import MultiMealT1DModel
@@ -63,11 +64,17 @@ if __name__ == '__main__':
         'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
     }
 
+    correlations = {('SI_B', 'p2') : -.5,
+                    ('SI_L', 'p2'): -.5,
+                    ('SI_D', 'p2'): -.5,
+                    }
+
     # Run twinning. The results (theta, history, rbg_data) are pickled to
     # results/twin_<save_name>.pkl so replay_multi_meal.py can load them.
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
                       unknown_parameters_prior=unknown_parameters_prior,
+                      correlations=None,
                       parallelize=True, n_jobs=-1, n_starts=32,
                       log_history=True,
                       path=save_folder, save_name=save_name)

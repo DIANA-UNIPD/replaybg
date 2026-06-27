@@ -4,6 +4,7 @@ from typing import Any
 
 import numpy as np
 from scipy.optimize import minimize
+from scipy.special import ndtri
 
 import warnings
 
@@ -13,6 +14,68 @@ from numba import float64, types
 from numba.typed import Dict
 
 _worker_args = None
+
+def _build_correlation_structure(unknown_parameters_prior, correlations):
+    """Builds the Gaussian-copula structure from pairwise prior correlations.
+
+    The caller is trusted for the input format (each key a 2-tuple of parameter
+    names present in ``unknown_parameters_prior``, each value a correlation in
+    ``[-1, 1]``, and each involved distribution exposing a ``cdf`` method).
+
+    Parameters
+    ----------
+    unknown_parameters_prior : dict
+        The prior specification; used only to fix the canonical parameter order.
+    correlations : dict or None
+        Pairwise correlations ``{(name_a, name_b): rho}``. Unlisted pairs are 0.
+
+    Returns
+    -------
+    dict or None
+        ``None`` when no correlations are given. Otherwise a dict with keys
+        ``names`` (the involved parameters, ordered as in
+        ``unknown_parameters_prior``), ``logdet_R`` and ``R_inv_minus_I``
+        (``R^-1 - I``), precomputed for the copula correction.
+
+    Raises
+    ------
+    ValueError
+        If the assembled correlation matrix is not positive definite.
+    """
+    if not correlations:
+        return None
+
+    # Determine the involved parameters, ordered as in unknown_parameters_prior
+    involved = set()
+    for a, b in correlations.keys():
+        involved.add(a)
+        involved.add(b)
+    names = [name for name in unknown_parameters_prior.keys() if name in involved]
+    index = {name: i for i, name in enumerate(names)}
+
+    # Assemble the symmetric correlation matrix R
+    k = len(names)
+    R = np.eye(k)
+    for (a, b), rho in correlations.items():
+        i, j = index[a], index[b]
+        R[i, j] = rho
+        R[j, i] = rho
+
+    # Positive-definiteness guard: a non-PD R makes the copula density undefined
+    # and would silently inject NaNs into the log-prior.
+    try:
+        np.linalg.cholesky(R)
+    except np.linalg.LinAlgError:
+        raise ValueError("correlation matrix is not positive definite")
+
+    R_inv = np.linalg.inv(R)
+    _, logdet_R = np.linalg.slogdet(R)
+
+    return {
+        'names': names,
+        'logdet_R': logdet_R,
+        'R_inv_minus_I': R_inv - np.eye(k),
+    }
 
 class Twinner():
     """A class that estimates model parameters by maximizing a posterior objective.
@@ -84,7 +147,7 @@ class Twinner():
             self.history['log_likelihood'] = []
             self.history['log_posterior'] = []
 
-    def twin(self, model : Any, rbg_data, unknown_parameters_prior) -> dict:
+    def twin(self, model : Any, rbg_data, unknown_parameters_prior, correlations=None) -> dict:
         """Runs the multi-start MAP estimation for a model.
 
         Builds ``n_starts`` initial guesses by sampling the parameter priors,
@@ -103,6 +166,11 @@ class Twinner():
         unknown_parameters_prior : dict
             A dictionary describing the priors and bounds for each parameter to
             estimate (keys ``prior``, ``min``, ``max`` and optional ``integer``).
+        correlations : dict or None, optional, default : None
+            Optional pairwise prior correlations specified as
+            ``{(name_a, name_b): rho}``. When given, the joint prior is a
+            Gaussian copula over the named parameters (marginals unchanged); when
+            ``None`` the parameters are treated as independent.
 
         Returns
         -------
@@ -112,9 +180,14 @@ class Twinner():
             to the bounds).
         """
 
+        # Build the (validated) Gaussian-copula correlation structure once, up
+        # front, so any error surfaces before the optimisation starts.
+        correlation_structure = _build_correlation_structure(unknown_parameters_prior, correlations)
+
         # Set the worker arguments
         global _worker_args
-        _worker_args = (self._neg_log_posterior, self._log_posterior, unknown_parameters_prior, model, rbg_data)
+        _worker_args = (self._neg_log_posterior, self._log_posterior, unknown_parameters_prior, model, rbg_data,
+                        correlation_structure)
 
         # Build initial guesses for the parameters using their priors
         start_guesses = []
@@ -134,6 +207,10 @@ class Twinner():
             print(f'  starts          : {self.n_starts}')
             print(f'  mode            : {mode}')
             print(f'  parameters ({len(param_names)})  : {", ".join(param_names)}')
+            if correlation_structure is not None:
+                pairs = ", ".join(f'{a}~{b}: {rho:g}'
+                                  for (a, b), rho in correlations.items())
+                print(f'  correlations    : {pairs}')
 
         t0 = time.perf_counter()
 
@@ -212,8 +289,13 @@ class Twinner():
         ret['x'] = clipped_x
         return ret
 
-    def _log_prior(self, model, unknown_parameters_prior):
+    def _log_prior(self, model, unknown_parameters_prior, correlation_structure=None):
         """Computes the log prior probability of the model parameters.
+
+        The base term is the sum of marginal log-densities. When a Gaussian-copula
+        ``correlation_structure`` is supplied, a copula correction term is added so
+        that the named parameters are jointly correlated while keeping their
+        marginals unchanged.
 
         Parameters
         ----------
@@ -222,23 +304,41 @@ class Twinner():
         unknown_parameters_prior : dict
             A dictionary describing the priors for each parameter. Each prior
             must provide an ``evaluate(value)`` method.
+        correlation_structure : dict or None, optional, default : None
+            Precomputed Gaussian-copula structure (see
+            :func:`_build_correlation_structure`). When ``None`` the parameters
+            are treated as independent.
 
         Returns
         -------
         float
-            The sum of log prior contributions for all parameters, or ``-inf``
-            when any parameter is outside its valid range.
+            The log prior probability, or ``-inf`` when any parameter is outside
+            its valid range.
         """
-        # Iterate over the parameters and compute the log prior
+        # Iterate over the parameters and compute the marginal log prior
         lp = 0
         for up, v in unknown_parameters_prior.items():
             parameter_value = getattr(model, up)
             # If the parameter is outside the valid range, return -inf
             if parameter_value > v['max'] or parameter_value < v['min']:
                 return -np.inf
-            # Otherwise, add the log prior contribution
+            # Otherwise, add the marginal log prior contribution
             lp += np.log(v['prior'].evaluate(parameter_value))
-        # Return the sum of log prior contributions
+
+        # Add the Gaussian-copula correction for correlated parameters (if any)
+        if correlation_structure is not None:
+            names = correlation_structure['names']
+            # Map each correlated parameter to a standard-normal score z = Phi^-1(F(x))
+            z = np.empty(len(names))
+            for i, name in enumerate(names):
+                u = unknown_parameters_prior[name]['prior'].cdf(getattr(model, name))
+                u = min(max(u, 1e-12), 1.0 - 1e-12)
+                z[i] = ndtri(u)
+            # log copula density: -0.5*logdet(R) - 0.5*z^T (R^-1 - I) z
+            lp += -0.5 * correlation_structure['logdet_R'] \
+                  - 0.5 * float(z @ correlation_structure['R_inv_minus_I'] @ z)
+
+        # Return the (possibly correlation-corrected) log prior
         return lp
 
     def _log_likelihood(self, model, rbg_data):
@@ -287,7 +387,7 @@ class Twinner():
         residuals = residuals[0::subsampling]
         return -0.5 * np.sum((residuals / sdn) ** 2)
 
-    def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
+    def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior, correlation_structure=None):
         """Returns the negative log posterior for optimization.
 
         Parameters
@@ -308,7 +408,8 @@ class Twinner():
             The negative log posterior value.
         """
         # Just return the negative log-posterior
-        log_prior, log_likelihood, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior)
+        log_prior, log_likelihood, log_post = self._log_posterior(theta, model, rbg_data, unknown_parameters_prior,
+                                                                  correlation_structure)
 
         # log the history
         if self.log_history:
@@ -319,7 +420,7 @@ class Twinner():
 
         return -log_post
 
-    def _log_posterior(self, theta, model, rbg_data, unknown_parameters_prior):
+    def _log_posterior(self, theta, model, rbg_data, unknown_parameters_prior, correlation_structure=None):
         """Compute log-prior, log-likelihood, and log-posterior in one model pass.
 
         The parameter vector is used directly in the natural (constrained)
@@ -359,7 +460,7 @@ class Twinner():
         model.reset(theta_dict)
 
         # Calculate log-prior
-        lp = self._log_prior(model, unknown_parameters_prior)
+        lp = self._log_prior(model, unknown_parameters_prior, correlation_structure)
         if lp == -np.inf or np.isnan(lp):
             return -np.inf, -np.inf, -np.inf
         # Calculate log-likelihood
@@ -395,13 +496,14 @@ def _run_optimization(args):
     i, start_guess = args
 
     # Get the worker arguments
-    neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data = _worker_args
+    neg_log_posterior_fn, log_posterior_components_fn, unknown_parameters_prior, model, rbg_data, \
+        correlation_structure = _worker_args
 
     # Run the optimization
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = minimize(neg_log_posterior_fn, start_guess, method='Powell',
-                          args=(model, rbg_data, unknown_parameters_prior,),
+                          args=(model, rbg_data, unknown_parameters_prior, correlation_structure,),
                           options={
                               'maxiter': 100000,
                               'maxfev': 100000,
