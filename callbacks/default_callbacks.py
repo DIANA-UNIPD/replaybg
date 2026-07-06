@@ -62,7 +62,7 @@ class CorrectionBolus(ReplayCallback):
             cb_mu_kgmin = cb_u * (1000.0 / self.rbg_data.body_weight)
             bolus_prev = ctx.get_input("bolus")
             ctx.add_input("bolus", cb_mu_kgmin)
-            ctx.log(u=cb_u, prev_u=bolus_prev, new_u=ctx.get_input("bolus"))
+            ctx.log(cb_u=cb_u, prev_u=bolus_prev, new_u=ctx.get_input("bolus"))
             self.last_correction_k = ctx.k
 
 
@@ -121,5 +121,5 @@ class HypoTreatment(ReplayCallback):
             carbs_mg_kgmin = self.carbs * (1000.0 / self.rbg_data.body_weight)
             meal_prev = ctx.get_input("meal_H")
             ctx.add_input("meal_H", carbs_mg_kgmin)
-            ctx.log(u=self.carbs, prev_u=meal_prev, new_u=ctx.get_input("meal_H"))
+            ctx.log(ht_g=self.carbs, prev_u=meal_prev, new_u=ctx.get_input("meal_H"))
             self.last_treatment_k = ctx.k

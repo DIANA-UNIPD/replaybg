@@ -182,7 +182,7 @@ class MultiMealExtendedT1DModel:
     t_start : int
         Minute-of-day at which this segment starts (drives the time-of-day SI).
     n_u : int
-        Number of input channels (11).
+        Number of input channels (13).
     u : numpy.ndarray
         Input history buffer used to retrieve delayed inputs during ``step``.
     previous_ra : numpy.ndarray
@@ -237,8 +237,8 @@ class MultiMealExtendedT1DModel:
         self.tsteps = np.int16(tsteps)
         self.t_start = np.int16(t_start)
 
-        # Number of inputs (8 meal channels + bolus + basal + t_hour = 11)
-        self.n_u = np.int16(11)
+        # Number of inputs (8 meal channels + bolus + basal + t_hour + forcing_ip + forcing_ra = 13)
+        self.n_u = np.int16(13)
 
         # Steady-state basal insulin (u2ss)
         self.u2ss = u2ss
@@ -510,8 +510,9 @@ class MultiMealExtendedT1DModel:
         Parameters
         ----------
         u : numpy.ndarray
-            The input vector for this step (11 channels: the eight meal slots
-            B/L/D/S/H/B2/L2/S2, bolus, basal and hour-of-day).
+            The input vector for this step (13 channels: the eight meal slots
+            B/L/D/S/H/B2/L2/S2, bolus, basal, hour-of-day, forcing_ip and
+            forcing_ra).
         t : int
             The integration step index (minute) to compute.
         """
@@ -545,6 +546,10 @@ class MultiMealExtendedT1DModel:
         u_i = self.u[8, t - self.tau] + self.u[9, t - self.tau] if (t - self.tau) >= 0 else self.u2ss
         self.u[10, t] = u[10]
         u_h = self.u[10, t]
+        self.u[11, t] = u[11]
+        u_fip = self.u[11, t] # forcing ip
+        self.u[12, t] = u[12]
+        u_fra = self.u[12, t] # forcing ra
 
         # Select insulin sensitivity based on hour of day:
         # breakfast window 04:00–10:59, lunch 11:00–16:59, dinner/night otherwise
@@ -621,7 +626,7 @@ class MultiMealExtendedT1DModel:
         # Subcutaneous compartment 1 → compartment 2 → plasma
         self.Isc1[t] = (self.Isc1[t-1] + u_i) * kd_fac
         self.Isc2[t] = (self.Isc2[t-1] + self.kd * self.Isc1[t]) / (1 + self.ka2)
-        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t]) / (1 + self.ke)
+        self.Ip[t] = (self.Ip[t-1] + self.ka2 * self.Isc2[t] + u_fip) / (1 + self.ke)
 
         # --- Insulin action and glucose (Backward Euler) ---
         # X depends on Ip[t] (just computed above)
@@ -631,7 +636,7 @@ class MultiMealExtendedT1DModel:
         self.G[t] = (self.G[t-1] + self.SG * self.Gb + self.f * (
                 self.kabs_B * self.Qgut_B[t] + self.kabs_L * self.Qgut_L[t] + self.kabs_D * self.Qgut_D[t] +
                 self.kabs_S * self.Qgut_S[t] + self.kabs_H * self.Qgut_H[t] +
-                self.kabs_B2 * self.Qgut_B2[t] + self.kabs_L2 * self.Qgut_L2[t] + self.kabs_S2 * self.Qgut_S2[t]) / self.VG + self.previous_ra[t-1] / self.VG) / (1 + self.SG + risk * self.X[t])
+                self.kabs_B2 * self.Qgut_B2[t] + self.kabs_L2 * self.Qgut_L2[t] + self.kabs_S2 * self.Qgut_S2[t]) / self.VG + self.previous_ra[t-1] / self.VG + u_fra / self.VG) / (1 + self.SG + risk * self.X[t])
         # Interstitial glucose: first-order low-pass filter on plasma glucose
         self.IG[t] = (self.alpha * self.IG[t-1] + self.G[t]) / (1 + self.alpha)
 
@@ -821,7 +826,7 @@ class MultiMealExtendedT1DModel:
         # set previous_ra.
         self.previous_ra = previous_ra
 
-        # Reset meal compartments in x0 — carry-over is now handled via forcing_ra.
+        # Reset meal compartments in x0 — carry-over is now handled via previous_ra.
         self.x0["Qsto1_B_0"] = np.float64(0.0)
         self.x0["Qsto2_B_0"] = np.float64(0.0)
         self.x0["Qgut_B_0"]  = np.float64(0.0)

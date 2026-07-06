@@ -86,7 +86,6 @@ class ReplayContext:
         self.data_to_input = rbg_data.data_to_input
         self.model = model
 
-        self._t_hour_all = rbg_data.t_hour
         self._name_to_idx = {name: idx for idx, name in rbg_data.data_to_input.items()}
         self._actions = []
         self._active_cb = None
@@ -96,7 +95,6 @@ class ReplayContext:
     def _advance(self, k, u):
         """Refresh the context for integration minute ``k`` with baseline ``u``."""
         self.k = k
-        self.t_hour = self._t_hour_all[k]
         self.u = u
 
     # -- input accessors (name-based) -----------------------------------------

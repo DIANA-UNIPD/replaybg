@@ -52,6 +52,12 @@ class SingleMealT1DData:
         Meal announcement signal.
     meal_type : numpy.ndarray
         Labels associated with meal events.
+    forcing_ip : numpy.ndarray
+        External forcing added directly to the plasma insulin compartment
+        (zero unless overridden after construction).
+    forcing_ra : numpy.ndarray
+        External forcing added directly to the glucose rate of appearance
+        (zero unless overridden after construction).
     u : numpy.ndarray
         Combined input matrix used by the model.
 
@@ -88,7 +94,9 @@ class SingleMealT1DData:
         if data_to_input is None:
             self.data_to_input = {0: 'meal',
                                   1: 'bolus',
-                                  2: 'basal'}
+                                  2: 'basal',
+                                  3: 'forcing_ip',
+                                  4: 'forcing_ra'}
         else:
             self.data_to_input = data_to_input
 
@@ -107,6 +115,12 @@ class SingleMealT1DData:
         # Set insulin from given data
         self.__insulin_setup(data)
         self.__meal_setup(data)
+
+        # Set the forcing inputs
+        self.forcing_ip = np.zeros([self.tsteps, ])
+        self.forcing_ra = np.zeros([self.tsteps, ])
+
+        # Create u
         self.__setup_u()
 
     def __time_setup(self,

@@ -53,6 +53,12 @@ class MultiMealExtendedT1DData:
         Meal announcement signal.
     meal_type : numpy.ndarray
         Labels associated with meal events.
+    forcing_ip : numpy.ndarray
+        External forcing added directly to the plasma insulin compartment
+        (zero unless overridden after construction).
+    forcing_ra : numpy.ndarray
+        External forcing added directly to the glucose rate of appearance
+        (zero unless overridden after construction).
     u : numpy.ndarray
         Combined input matrix used by the model.
 
@@ -97,7 +103,9 @@ class MultiMealExtendedT1DData:
                                   7: 'meal_S2',
                                   8: 'bolus',
                                   9: 'basal',
-                                  10: 't_hour'}
+                                  10: 't_hour',
+                                  11: 'forcing_ip',
+                                  12: 'forcing_ra'}
         else:
             self.data_to_input = data_to_input
 
@@ -118,6 +126,12 @@ class MultiMealExtendedT1DData:
         # Set insulin from given data
         self.__insulin_setup(data)
         self.__meal_setup(data)
+
+        # Set the forcing inputs
+        self.forcing_ip = np.zeros([self.tsteps, ])
+        self.forcing_ra = np.zeros([self.tsteps, ])
+
+        # Create u
         self.__setup_u()
 
     def __time_setup(self,

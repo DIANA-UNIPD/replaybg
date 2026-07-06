@@ -17,7 +17,7 @@ from callbacks import CorrectionBolus, HypoTreatment
 from sensors import Vettoretti19CGM
 from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
-from utils.numba_dicts import to_typed_f32_dict
+from utils.numba_dicts import to_typed_f64_dict
 
 from utils.plot_replay import plot_replay
 
@@ -37,7 +37,7 @@ if __name__ == '__main__':
 
     # --- Baseline replay (no policy) ---
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
-                              theta0=to_typed_f32_dict(theta_estimated), t_start=rbg_data.t_start)
+                              theta0=to_typed_f64_dict(theta_estimated), t_start=rbg_data.t_start)
     baseline = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, save_name='baseline')
 
     # --- Replay with a correction-bolus callback, acting on a noisy CGM sensor ---
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     hypotreatment_callback = HypoTreatment(threshold=70, carbs=15, lockout_min=30)
     sensor = Vettoretti19CGM()
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
-                              theta0=to_typed_f32_dict(theta_estimated), t_start=rbg_data.t_start)
+                              theta0=to_typed_f64_dict(theta_estimated), t_start=rbg_data.t_start)
     controlled = rbg.replay(rbg_data=rbg_data, model=model, path=save_folder, save_name='controlled',
                             callbacks=[correction_bolus_callback, hypotreatment_callback],
                             sensor=sensor)

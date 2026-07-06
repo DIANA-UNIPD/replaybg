@@ -151,7 +151,6 @@ class ReplayBG:
 
     def replay(self, rbg_data,
                model: object = None,
-               theta: Dict = None,
                callbacks: list | None = None,
                sensor: object = None,
                path: str | None = None, save_name: str | None = None,
@@ -184,9 +183,6 @@ class ReplayBG:
         model : object, optional, default : None
             A model instance implementing the model interface contract
             (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
-        theta : dict, optional, default : None
-            The model parameters to use for the forward simulation, typically the
-            estimated parameters returned by :meth:`twin`.
         callbacks : list or None, optional, default : None
             A list of :class:`~callbacks.callback.ReplayCallback` control policies
             invoked before each model step. Each may modify the current-step

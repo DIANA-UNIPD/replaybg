@@ -316,27 +316,38 @@ class Twinner():
             its valid range.
         """
         # Iterate over the parameters and compute the marginal log prior
-        lp = 0
+        lp = 0.0
         for up, v in unknown_parameters_prior.items():
             parameter_value = getattr(model, up)
+            a = v["min"]
+            b = v["max"]
             # If the parameter is outside the valid range, return -inf
-            if parameter_value > v['max'] or parameter_value < v['min']:
+            if parameter_value < a or parameter_value > b:
                 return -np.inf
-            # Otherwise, add the marginal log prior contribution
-            lp += np.log(v['prior'].evaluate(parameter_value))
+            # Otherwise, add the marginal log prior contribution (corrected for the truncation)
+            density = v["prior"].evaluate(parameter_value)
+            z = v["prior"].cdf(b) - v["prior"].cdf(a)
+            if density <= 0 or z <= 0:
+                return -np.inf
+            lp += np.log(density) - np.log(z)
 
         # Add the Gaussian-copula correction for correlated parameters (if any)
         if correlation_structure is not None:
             names = correlation_structure['names']
             # Map each correlated parameter to a standard-normal score z = Phi^-1(F(x))
-            z = np.empty(len(names))
+            z_scores = np.empty(len(names))
             for i, name in enumerate(names):
-                u = unknown_parameters_prior[name]['prior'].cdf(getattr(model, name))
-                u = min(max(u, 1e-12), 1.0 - 1e-12)
-                z[i] = ndtri(u)
+                v = unknown_parameters_prior[name]
+                x = getattr(model, name)
+                fa = v["prior"].cdf(v["min"])
+                fb = v["prior"].cdf(v["max"])
+                fx = v["prior"].cdf(x)
+                u = (fx - fa) / (fb - fa)
+                u = np.clip(u, 1e-12, 1.0 - 1e-12)
+                z_scores[i] = ndtri(u)
             # log copula density: -0.5*logdet(R) - 0.5*z^T (R^-1 - I) z
             lp += -0.5 * correlation_structure['logdet_R'] \
-                  - 0.5 * float(z @ correlation_structure['R_inv_minus_I'] @ z)
+                  - 0.5 * float(z_scores @ correlation_structure['R_inv_minus_I'] @ z_scores)
 
         # Return the (possibly correlation-corrected) log prior
         return lp
@@ -382,10 +393,11 @@ class Twinner():
         cv = 0.05  # constant coefficient of variation (5%) #TODO: make this a parameter
         residuals = out[rbg_data.y_idxs] - rbg_data.y[rbg_data.y_idxs]
         sdn = cv * np.abs(out[rbg_data.y_idxs])
-        subsampling = 6 #TODO: decide where to evaluate ll (now every 30 minutes but maybe we can do something smarter)
+        subsampling = 1 #TODO: decide where to evaluate ll (now every 30 minutes but maybe we can do something smarter)
         sdn = sdn[0::subsampling]
         residuals = residuals[0::subsampling]
-        return -0.5 * np.sum((residuals / sdn) ** 2)
+        n = len(residuals)
+        return -0.5 * np.sum((residuals / sdn) ** 2) - np.sum(np.log(sdn)) - 0.5 * n * np.log(2 * np.pi)
 
     def _neg_log_posterior(self, theta, model, rbg_data, unknown_parameters_prior, correlation_structure=None):
         """Returns the negative log posterior for optimization.

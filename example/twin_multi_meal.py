@@ -10,7 +10,6 @@ from multiprocessing import freeze_support
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
-from statsmodels.graphics import correlation
 
 from data.multi_meal_t1d_data import MultiMealT1DData
 from model.multi_meal_t1d import MultiMealT1DModel
@@ -74,9 +73,9 @@ if __name__ == '__main__':
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
                       unknown_parameters_prior=unknown_parameters_prior,
-                      correlations=None,
-                      parallelize=True, n_jobs=-1, n_starts=32,
-                      log_history=True,
+                      correlations=correlations,
+                      parallelize=True, n_jobs=-1, n_starts=128,
+                      log_history=False,
                       path=save_folder, save_name=save_name)
 
     # Analyze the fit with AGATA (glycemic profile of the fitted trace + the
@@ -88,7 +87,7 @@ if __name__ == '__main__':
     # Plot the twinning fit: simulated model output (with estimated theta) vs the
     # observed data, plus the inputs that drove the fit. Hide the t_hour channel.
     mask_inputs = [i for i, name in rbg_data.data_to_input.items() if name == 't_hour']
-    fig = plot_twinning(rbg_data, model, theta=result['theta'],
+    fig = plot_twinning(rbg_data, model, theta=result['theta'],input_groups=[[0, 1, 2, 3, 4],[5],[6]],
                         thresholds=[70, 180], mask_inputs=mask_inputs)
     fig.show()
 
