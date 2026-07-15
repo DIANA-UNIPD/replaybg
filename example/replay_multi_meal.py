@@ -13,7 +13,7 @@ from model.multi_meal_t1d import MultiMealT1DModel
 from replaybg import ReplayBG
 from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
-from utils.numba_dicts import to_typed_f32_dict
+from utils.numba_dicts import to_typed_f64_dict
 from utils.plot_replay import plot_replay
 
 if __name__ == '__main__':
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # Initialize the model with the estimated parameters. t_start is recovered from
     # the prepared data, so no original DataFrame is needed.
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
-                              theta0=to_typed_f32_dict(theta_estimated),
+                              theta0=to_typed_f64_dict(theta_estimated),
                               t_start=rbg_data.t_start)
 
     # Run replay and save the simulation

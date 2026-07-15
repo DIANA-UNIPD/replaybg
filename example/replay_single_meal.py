@@ -13,7 +13,7 @@ from model.single_meal_t1d import SingleMealT1DModel
 from replaybg import ReplayBG
 from utils.agata_analysis import analyze_replay
 from utils.load_results import load_results
-from utils.numba_dicts import to_typed_f32_dict
+from utils.numba_dicts import to_typed_f64_dict
 from utils.plot_replay import plot_replay
 
 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
     # Initialize the model with the estimated parameters
     model = SingleMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
-                               theta0=to_typed_f32_dict(theta_estimated))
+                               theta0=to_typed_f64_dict(theta_estimated))
 
     # Run replay and save the simulation
     out = rbg.replay(rbg_data=rbg_data,

@@ -46,6 +46,7 @@ if __name__ == '__main__':
     unknown_parameters_prior = {
         'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
         'SG': {'prior': LogNormal(mu=-3.8, sigma=0.05), 'min': 0, 'max': .5},
+        'f': {'prior': Normal(mu=0.8, sigma=0.05), 'min': 0, 'max': 1},
         'p2': {'prior': Normal(mu=0.11, sigma=0.05), 'min': 0, 'max': .5},
         'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
         'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},

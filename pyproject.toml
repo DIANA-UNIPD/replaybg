@@ -16,3 +16,19 @@ dependencies = [
     "tqdm",
     "py_agata",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+# Modules live at the repo root (imported as `from distributions import ...`,
+# `from environment import ...`), so put the root on sys.path for the tests.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: heavy end-to-end tests (deselect with '-m \"not slow\"')",
+]
