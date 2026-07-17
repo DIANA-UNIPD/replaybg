@@ -71,6 +71,15 @@ install step.
   `data_two_day_extended` trace (~29 h, 349 samples) so the second-day B2/S2
   meals exercise those channels (there is no L2 meal, so `kabs_L2`/`beta_L2`
   stay unconstrained). Heaviest test; `slow`.
+- `test_plot_utils.py` — the plotting utilities (`plot_replay`,
+  `plot_twinning_history` and the shared `utils/plot_common.py`). Asserts what
+  the figures *contain* rather than how they look: that every logged callback
+  action reaches the canvas and is labelled with the field actually plotted, that
+  channels are stemmed or stepped according to their sparsity, that
+  `mask_inputs` / `input_groups` resolve as documented, that each history panel is
+  filtered by its own non-finite values, and that the hover crosshair reads dense
+  and sparse series correctly without disturbing the data limits. Renders on the
+  `Agg` backend, so no display is needed.
 
 The Numba `@jitclass` model classes are not yet covered — they are the natural
 next tier to add.

@@ -1,8 +1,18 @@
 import numpy as np
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
 from utils.numba_dicts import to_typed_f64_dict
+from utils.plot_common import (
+    KIND_DENSE,
+    KIND_SPARSE,
+    draw_input_group,
+    draw_thresholds,
+    finalize,
+    make_figure,
+    resolve_input_layout,
+    series,
+    set_panel_title,
+)
 
 
 def plot_twinning(
@@ -16,6 +26,7 @@ def plot_twinning(
     output_label: str = "Fit",
     observation_label: str = "Data",
     figsize: tuple[float, float] | None = None,
+    hover: bool = True,
 ) -> plt.Figure:
     """Plot the outcome of a ``ReplayBG.twin()`` run.
 
@@ -32,7 +43,8 @@ def plot_twinning(
        ``theta`` as a continuous line and the observed data (``rbg_data.y`` at the
        non-missing indices ``rbg_data.y_idxs``) as markers. Each value in
        ``thresholds`` is drawn as a dashed horizontal line spanning the whole
-       width, acting as a visual reference level.
+       width, acting as a visual reference level, and the span between the
+       outermost levels is shaded.
     2. **Inputs** (one subplot per input *group*): the inputs that drove the
        fit, labelled via ``data_to_input``. By default every channel gets its own
        subplot; pass ``input_groups`` to overlay channels together.
@@ -56,7 +68,7 @@ def plot_twinning(
         ``theta0``).
     thresholds : list of float or None, optional, default : None
         Optional reference levels drawn as dashed horizontal lines on the fit
-        subplot.
+        subplot. Two or more levels also shade the span between the outermost.
     input_groups : list of list of int or None, optional, default : None
         Optional list of channel-index groups. Each group becomes one subplot
         with its channels overlaid. ``None`` plots one channel per subplot, in
@@ -74,6 +86,10 @@ def plot_twinning(
     figsize : tuple of float or None, optional, default : None
         Optional figure size. Defaults to a height that grows with the number of
         subplots.
+    hover : bool, optional, default : True
+        Whether to attach the interactive readout: hovering any subplot drops a
+        vertical cursor across the whole stack and reports the values at that
+        minute. Ignored on non-interactive backends.
 
     Returns
     -------
@@ -97,27 +113,15 @@ def plot_twinning(
     t = np.arange(tsteps) * ts_min
 
     # --- resolve the subplot layout ------------------------------------------
-    # A distinct color per input channel, keyed by its global index so the same
-    # channel reads the same wherever it appears (and survives masking).
-    all_idxs = sorted(data_to_input.keys())
-    cmap = plt.get_cmap("tab20" if len(all_idxs) > 10 else "tab10")
-    input_colors = {idx: mcolors.to_hex(cmap(i % cmap.N)) for i, idx in enumerate(all_idxs)}
-
-    masked = set(mask_inputs or [])
-    if input_groups is None:
-        input_groups = [[idx] for idx in all_idxs if idx not in masked]
-    else:
-        input_groups = [[idx for idx in group if idx not in masked] for group in input_groups]
-        input_groups = [group for group in input_groups if group]
+    input_groups, input_colors = resolve_input_layout(data_to_input, input_groups, mask_inputs)
 
     n_rows = 1 + len(input_groups)
-    if figsize is None:
-        figsize = (10, 2.2 * n_rows)
-    fig, axes = plt.subplots(n_rows, 1, figsize=figsize, sharex=True)
-    axes = np.atleast_1d(axes)
+    fig, axes = make_figure(n_rows, figsize)
+    hover_series = {}
 
     # --- 1. fit subplot ------------------------------------------------------
     ax = axes[0]
+    draw_thresholds(ax, thresholds)
     ax.plot(t, output, color="tab:blue", linewidth=1.2, label=output_label)
 
     # Observations live at data resolution; each sample i sits yts integration
@@ -130,39 +134,19 @@ def plot_twinning(
         linestyle="none", marker="o", markersize=3,
         color="tab:red", alpha=0.7, label=observation_label,
     )
-
-    for level in (thresholds or []):
-        ax.axhline(level, linestyle="--", color="gray", linewidth=0.8)
+    hover_series[ax] = [
+        series(output_label, t, output, KIND_DENSE),
+        series(observation_label, obs_t, y[y_idxs], KIND_SPARSE),
+    ]
 
     ax.set_ylabel(output_label)
-    ax.set_title("Twinning fit")
-    ax.legend(fontsize="small", loc="upper right")
+    set_panel_title(ax, "Twinning fit")
+    ax.legend(fontsize="small", loc="upper right", framealpha=0.9)
 
     # --- 2. input subplots ---------------------------------------------------
-    # Inputs are typically sparse impulses (boluses, meals) held over a sample
-    # window, so they read best as stems at the non-zero steps rather than as a
-    # dense line. Only non-zero values are stemmed to avoid clutter.
     for row, group in enumerate(input_groups, start=1):
-        ax = axes[row]
-        for idx in group:
-            name = data_to_input.get(idx, f"input_{idx}")
-            color = input_colors[idx]
-            channel = inputs[:, idx]
-            nz = np.flatnonzero(channel)
-            if nz.size:
-                ax.stem(
-                    t[nz], channel[nz],
-                    linefmt=color, markerfmt="none", basefmt=" ", label=name,
-                )
-            else:
-                # Keep the channel in the legend even when it never fires.
-                ax.plot([], [], color=color, label=name)
-        ax.set_ylabel("Input")
-        names = ", ".join(data_to_input.get(idx, f"input_{idx}") for idx in group)
-        ax.set_title(names)
-        if len(group) > 1:
-            ax.legend(fontsize="small", loc="upper right")
+        hover_series[axes[row]] = draw_input_group(
+            axes[row], t, inputs, group, data_to_input, input_colors)
 
-    axes[-1].set_xlabel("Time (min)")
-    fig.tight_layout()
+    finalize(fig, axes, "Time (min)", hover_series, hover, x_fmt="t = {:.0f} min")
     return fig

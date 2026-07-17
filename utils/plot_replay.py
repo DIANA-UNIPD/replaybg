@@ -1,6 +1,17 @@
 import numpy as np
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+
+from utils.plot_common import (
+    KIND_DENSE,
+    KIND_SPARSE,
+    draw_input_group,
+    draw_thresholds,
+    finalize,
+    make_figure,
+    resolve_input_layout,
+    series,
+    set_panel_title,
+)
 
 
 def plot_replay(
@@ -8,11 +19,12 @@ def plot_replay(
     thresholds: list[float] | None = None,
     input_groups: list[list[int]] | None = None,
     mask_inputs: list[int] | None = None,
-    action_field: str = "u",
+    action_field: str | None = None,
     ts_min: float = 1.0,
     output_label: str = "Output",
     measurement_label: str = "Measurement",
     figsize: tuple[float, float] | None = None,
+    hover: bool = True,
 ) -> plt.Figure:
     """Plot the outcome of a ``ReplayBG.replay()`` run.
 
@@ -21,7 +33,8 @@ def plot_replay(
     1. **Output** (first subplot): the replayed ``output`` as a continuous line
        and, when a sensor was used, the replayed ``measurement`` as markers.
        Each value in ``thresholds`` is drawn as a dashed horizontal line
-       spanning the whole width, acting as a visual reference level.
+       spanning the whole width, acting as a visual reference level, and the span
+       between the outermost levels is shaded.
     2. **Inputs** (one subplot per input *group*): the applied ``input``
        channels, labelled via ``data_to_input``. By default every channel gets
        its own subplot; pass ``input_groups`` to overlay channels together.
@@ -40,7 +53,7 @@ def plot_replay(
         ``measurement_time`` are used when present.
     thresholds : list of float or None, optional, default : None
         Optional reference levels drawn as dashed horizontal lines on the output
-        subplot.
+        subplot. Two or more levels also shade the span between the outermost.
     input_groups : list of list of int or None, optional, default : None
         Optional list of channel-index groups. Each group becomes one subplot
         with its channels overlaid. ``None`` plots one channel per subplot, in
@@ -49,10 +62,13 @@ def plot_replay(
         Optional list of channel indices to hide. Masked channels are dropped
         from the (default or explicit) ``input_groups`` so they get no subplot;
         e.g. pass the ``t_hour`` index to skip it.
-    action_field : str, optional, default : "u"
-        Name of the scalar field to plot for each callback action. When a record
-        lacks it, the function falls back to the record's lone non-metadata field
-        (anything other than ``k``/``callback``).
+    action_field : str or None, optional, default : None
+        Name of the scalar field to plot for each callback action. ``None``
+        resolves it per callback to the first numeric field the callback logged
+        (anything other than ``k``/``callback``), which by convention is the
+        quantity the action delivered. An explicit name is used for every
+        callback that logs it; callbacks that do not fall back to the automatic
+        choice.
     ts_min : float, optional, default : 1.0
         Minutes represented by one integration step, used to scale the time axis.
     output_label : str, optional, default : "Output"
@@ -62,6 +78,10 @@ def plot_replay(
     figsize : tuple of float or None, optional, default : None
         Optional figure size. Defaults to a height that grows with the number of
         subplots.
+    hover : bool, optional, default : True
+        Whether to attach the interactive readout: hovering any subplot drops a
+        vertical cursor across the whole stack and reports the values at that
+        minute. Ignored on non-interactive backends.
 
     Returns
     -------
@@ -77,31 +97,20 @@ def plot_replay(
     t = np.arange(tsteps) * ts_min
 
     # --- resolve the subplot layout -----------------------------------------
-    # A distinct color per input channel, keyed by its global index so the same
-    # channel reads the same wherever it appears (and survives masking).
-    all_idxs = sorted(data_to_input.keys())
-    cmap = plt.get_cmap("tab20" if len(all_idxs) > 10 else "tab10")
-    input_colors = {idx: mcolors.to_hex(cmap(i % cmap.N)) for i, idx in enumerate(all_idxs)}
-
-    masked = set(mask_inputs or [])
-    if input_groups is None:
-        input_groups = [[idx] for idx in all_idxs if idx not in masked]
-    else:
-        input_groups = [[idx for idx in group if idx not in masked] for group in input_groups]
-        input_groups = [group for group in input_groups if group]
+    input_groups, input_colors = resolve_input_layout(data_to_input, input_groups, mask_inputs)
 
     # Distinct callbacks, in first-seen order, that actually logged something.
     callback_names = list(dict.fromkeys(rec["callback"] for rec in actions))
 
     n_rows = 1 + len(input_groups) + len(callback_names)
-    if figsize is None:
-        figsize = (10, 2.2 * n_rows)
-    fig, axes = plt.subplots(n_rows, 1, figsize=figsize, sharex=True)
-    axes = np.atleast_1d(axes)
+    fig, axes = make_figure(n_rows, figsize)
+    hover_series = {}
 
     # --- 1. output subplot ---------------------------------------------------
     ax = axes[0]
+    draw_thresholds(ax, thresholds)
     ax.plot(t, output, color="tab:blue", linewidth=1.2, label=output_label)
+    hover_series[ax] = [series(output_label, t, output, KIND_DENSE)]
 
     measurement = replay_results.get("measurement")
     measurement_time = replay_results.get("measurement_time")
@@ -109,89 +118,71 @@ def plot_replay(
         measurement = np.asarray(measurement)
         measurement_time = np.asarray(measurement_time)
         mask = np.isfinite(measurement)
+        meas_t = measurement_time[mask] * ts_min
         ax.plot(
-            measurement_time[mask] * ts_min, measurement[mask],
+            meas_t, measurement[mask],
             linestyle="none", marker="o", markersize=3,
             color="tab:red", alpha=0.7, label=measurement_label,
         )
-
-    for level in (thresholds or []):
-        ax.axhline(level, linestyle="--", color="gray", linewidth=0.8)
+        hover_series[ax].append(series(measurement_label, meas_t, measurement[mask], KIND_SPARSE))
 
     ax.set_ylabel(output_label)
-    ax.set_title("Output")
-    ax.legend(fontsize="small", loc="upper right")
+    set_panel_title(ax, "Output")
+    ax.legend(fontsize="small", loc="upper right", framealpha=0.9)
 
     # --- 2. input subplots ---------------------------------------------------
-    # Inputs are typically sparse impulses (boluses, meals) held over a sample
-    # window, so they read best as stems at the non-zero steps rather than as a
-    # dense line. Only non-zero values are stemmed to avoid clutter.
     for row, group in enumerate(input_groups, start=1):
-        ax = axes[row]
-        for idx in group:
-            name = data_to_input.get(idx, f"input_{idx}")
-            color = input_colors[idx]
-            channel = inputs[:, idx]
-            nz = np.flatnonzero(channel)
-            if nz.size:
-                ax.stem(
-                    t[nz], channel[nz],
-                    linefmt=color, markerfmt="none", basefmt=" ", label=name,
-                )
-            else:
-                # Keep the channel in the legend even when it never fires.
-                ax.plot([], [], color=color, label=name)
-        ax.set_ylabel("Input")
-        names = ", ".join(data_to_input.get(idx, f"input_{idx}") for idx in group)
-        ax.set_title(names)
-        if len(group) > 1:
-            ax.legend(fontsize="small", loc="upper right")
+        hover_series[axes[row]] = draw_input_group(
+            axes[row], t, inputs, group, data_to_input, input_colors)
 
     # --- 3. callback action subplots ----------------------------------------
     base = 1 + len(input_groups)
     for row, cb_name in enumerate(callback_names, start=base):
         ax = axes[row]
-        ks, values = [], []
-        for rec in actions:
-            if rec["callback"] != cb_name:
-                continue
-            value = _action_value(rec, action_field)
-            if value is None:
-                continue
-            ks.append(rec["k"] * ts_min)
-            values.append(value)
-        if ks:
-            ax.stem(ks, values, basefmt=" ")
-        ax.set_ylabel(action_field)
-        ax.set_title(f"Callback: {cb_name}")
+        records = [rec for rec in actions if rec["callback"] == cb_name]
+        field = _resolve_action_field(records, action_field)
+        ks = np.array([rec["k"] * ts_min for rec in records if field in rec])
+        values = np.array([rec[field] for rec in records if field in rec], dtype=float)
+        # Registered even when empty, so the cursor still tracks across a panel
+        # whose callback logged nothing plottable.
+        hover_series[ax] = []
+        if ks.size:
+            markerline, _, _ = ax.stem(ks, values, linefmt="tab:purple",
+                                       markerfmt="o", basefmt=" ")
+            plt.setp(markerline, color="tab:purple", markersize=4)
+            hover_series[ax] = [series(field, ks, values, KIND_SPARSE)]
+        ax.set_ylabel(field or "")
+        set_panel_title(ax, f"Callback: {cb_name}")
 
-    axes[-1].set_xlabel("Time (min)")
-    fig.tight_layout()
+    finalize(fig, axes, "Time (min)", hover_series, hover, x_fmt="t = {:.0f} min")
     return fig
 
 
-def _action_value(record: dict, action_field: str):
-    """Returns the scalar to plot for an action record.
+def _resolve_action_field(records: list[dict], action_field: str | None) -> str | None:
+    """Returns the record field to plot for one callback's actions.
 
-    Prefers ``action_field``; otherwise falls back to the record's single
-    non-metadata field so the utility stays agnostic to callback internals.
+    Honours ``action_field`` when the callback logs it. Otherwise picks the first
+    numeric non-metadata field, which by the logging convention is the quantity
+    the action delivered (e.g. ``cb_u`` for a bolus, ``ht_g`` for a rescue), so
+    the utility stays agnostic to callback internals.
 
     Parameters
     ----------
-    record : dict
-        A single action record from the replay action log.
-    action_field : str
-        The preferred field name to read from the record.
+    records : list of dict
+        The action records logged by a single callback.
+    action_field : str or None
+        The caller's preferred field name, or ``None`` to choose automatically.
 
     Returns
     -------
-    float or None
-        The scalar value to plot, or ``None`` when it cannot be resolved
-        unambiguously.
+    str or None
+        The field name to plot, or ``None`` when the callback logged no numeric
+        field.
     """
-    if action_field in record:
-        return record[action_field]
-    extras = [k for k in record if k not in ("k", "callback")]
-    if len(extras) == 1:
-        return record[extras[0]]
+    if action_field is not None and any(action_field in rec for rec in records):
+        return action_field
+    for rec in records:
+        for key, value in rec.items():
+            if key not in ("k", "callback") and isinstance(value, (int, float, np.floating, np.integer)):
+                return key
     return None

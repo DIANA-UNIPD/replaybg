@@ -1,9 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+from utils.plot_common import (
+    KIND_DENSE,
+    finalize,
+    make_figure,
+    series,
+    set_panel_title,
+)
 
-def plot_twinning_history(history: dict, param_names: list[str] | None = None) -> plt.Figure:
+
+def plot_twinning_history(
+    history: dict,
+    param_names: list[str] | None = None,
+    figsize: tuple[float, float] | None = None,
+    hover: bool = True,
+) -> plt.Figure:
     """Plots the optimization history from a twinning run.
+
+    The figure follows the same rationale as :func:`plot_replay` and
+    :func:`plot_twinning`: a vertical stack of subplots sharing a common x axis,
+    here the function evaluation rather than time.
+
+    1. **Parameter trajectory**: each unknown parameter's value per evaluation.
+    2. **Log-prior**, **log-likelihood**, **log-posterior**: the three terms the
+       twinner is optimising, one per subplot.
 
     Parameters
     ----------
@@ -14,6 +35,13 @@ def plot_twinning_history(history: dict, param_names: list[str] | None = None) -
     param_names : list of str or None, optional, default : None
         Optional list of parameter names for the theta legend. Defaults to
         ``theta_0``, ``theta_1``, ...
+    figsize : tuple of float or None, optional, default : None
+        Optional figure size. Defaults to a height that grows with the number of
+        subplots.
+    hover : bool, optional, default : True
+        Whether to attach the interactive readout: hovering any subplot drops a
+        vertical cursor across the whole stack and reports the values at that
+        evaluation. Ignored on non-interactive backends.
 
     Returns
     -------
@@ -35,39 +63,33 @@ def plot_twinning_history(history: dict, param_names: list[str] | None = None) -
     if param_names is None:
         param_names = [f'theta_{i}' for i in range(n_params)]
 
-    fig, axes = plt.subplots(4, 1, figsize=(10, 10), sharex=True)
+    fig, axes = make_figure(4, figsize or (10, 10))
+    hover_series = {}
 
     # --- theta ---
     ax = axes[0]
+    hover_series[ax] = []
     for i in range(n_params):
         mask = np.isfinite(thetas[:, i])
         ax.plot(steps[mask], thetas[mask, i], label=param_names[i], linewidth=0.8)
+        hover_series[ax].append(series(param_names[i], steps[mask], thetas[mask, i], KIND_DENSE))
     ax.set_ylabel('Parameter value')
-    ax.set_title('Parameter trajectory')
+    set_panel_title(ax, 'Parameter trajectory')
     if n_params <= 10:
-        ax.legend(fontsize='small', ncol=min(n_params, 4))
+        ax.legend(fontsize='small', ncol=min(n_params, 4), framealpha=0.9)
 
-    # --- log-prior ---
-    ax = axes[1]
+    # --- the three optimisation terms ---
+    terms = [
+        ('Log-prior', log_prior, 'tab:blue'),
+        ('Log-likelihood', log_likelihood, 'tab:orange'),
+        ('Log-posterior', log_posterior, 'tab:green'),
+    ]
+    for ax, (label, values, color) in zip(axes[1:], terms):
+        mask = np.isfinite(values)
+        ax.plot(steps[mask], values[mask], color=color, linewidth=0.8)
+        hover_series[ax] = [series(label, steps[mask], values[mask], KIND_DENSE)]
+        ax.set_ylabel(label)
+        set_panel_title(ax, label)
 
-    ax.plot(steps[mask], log_prior[mask], color='tab:blue', linewidth=0.8)
-    ax.set_ylabel('Log-prior')
-    ax.set_title('Log-prior')
-
-    # --- log-likelihood ---
-    ax = axes[2]
-    mask = np.isfinite(log_likelihood)
-    ax.plot(steps[mask], log_likelihood[mask], color='tab:orange', linewidth=0.8)
-    ax.set_ylabel('Log-likelihood')
-    ax.set_title('Log-likelihood')
-
-    # --- log-posterior ---
-    ax = axes[3]
-    mask = np.isfinite(log_posterior)
-    ax.plot(steps[mask], log_posterior[mask], color='tab:green', linewidth=0.8)
-    ax.set_ylabel('Log-posterior')
-    ax.set_title('Log-posterior')
-    ax.set_xlabel('Function evaluation')
-
-    fig.tight_layout()
+    finalize(fig, axes, 'Function evaluation', hover_series, hover, x_fmt='eval = {:.0f}')
     return fig

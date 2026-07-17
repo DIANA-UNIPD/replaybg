@@ -45,7 +45,11 @@ if __name__ == '__main__':
     # measurement. Callbacks read ctx.measurement, so they close the loop on the noisy
     # signal instead of the true output.
     correction_bolus_callback = CorrectionBolus(threshold=180, target=120, cf=50, lockout_min=60)
-    hypotreatment_callback = HypoTreatment(threshold=70, carbs=15, lockout_min=30)
+    # HypoTreatment reads the bolus CorrectionBolus published on ctx.shared: if a
+    # correction went in within the last 90 min that insulin is still working, so the
+    # rescue is sized up. Neither policy holds a reference to the other.
+    hypotreatment_callback = HypoTreatment(threshold=70, carbs=15, lockout_min=30,
+                                           stacking_window_min=90, stacking_carbs=10)
     sensor = Vettoretti19CGM()
     model = MultiMealT1DModel(u2ss=rbg_data.u2ss, tsteps=rbg_data.tsteps,
                               theta0=to_typed_f64_dict(theta_estimated), t_start=rbg_data.t_start)

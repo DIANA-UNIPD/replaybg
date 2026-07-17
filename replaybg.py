@@ -248,7 +248,7 @@ class ReplayBG:
             # Latest measurement available to a controller acting at step k.
             ctx.measurement = meas_hold[k - 1] if use_sensor else out[k - 1]
             for cb in callbacks:
-                ctx._active_cb = type(cb).__name__
+                ctx._active_cb = cb.name or type(cb).__name__
                 cb.action(ctx)
             model.step(ctx.u, k)
             out[k] = model.output(k)

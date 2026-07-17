@@ -10,6 +10,9 @@ class ReplayCallback:
     - keep **memory** in instance attributes, which persist across all timesteps
       of a single ``replay()`` call and remain inspectable on the instance after
       the run finishes;
+    - share **state with other callbacks** through ``ctx.shared``, a free-form
+      dict that persists across every step of the run; prefer it to holding
+      references to other callback objects;
     - override :meth:`action` to read the simulation state from the context and
       modify the current-step inputs via ``ctx.set_input`` / ``ctx.add_input``.
 

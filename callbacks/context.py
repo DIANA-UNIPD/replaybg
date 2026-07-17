@@ -17,6 +17,16 @@ class ReplayContext:
     one-minute pulse, which is an acceptable approximation for correction
     boluses; spread the value over several steps yourself if it matters.
 
+    Note
+    ----
+    ``shared`` records only values, not when they were written. Because
+    callbacks run in the order they are passed to ``replay()``, a reader placed
+    *before* a writer sees the value that writer published at an *earlier* step.
+    When freshness matters, store the step alongside the value (e.g.
+    ``ctx.shared["last_bolus"] = {"u": cb_u, "k": ctx.k}``) and compare against
+    ``ctx.k`` on read — see ``CorrectionBolus`` / ``HypoTreatment`` for a worked
+    example.
+
     ...
     Attributes
     ----------
@@ -47,6 +57,12 @@ class ReplayContext:
     model : object
         The live model (read-only by convention) for advanced state such as
         plasma insulin (``model.Ip``) to derive insulin-on-board.
+    shared : dict
+        Free-form store for callbacks to exchange data by name. Empty at the
+        start of the run; entries persist until overwritten and are never
+        cleared between steps. Keys are a contract between cooperating
+        callbacks: any callback able to produce a quantity may publish it, and
+        readers need not know which class did.
 
     Methods
     -------
@@ -85,6 +101,7 @@ class ReplayContext:
         self.measurement_history = output_history
         self.data_to_input = rbg_data.data_to_input
         self.model = model
+        self.shared = {}
 
         self._name_to_idx = {name: idx for idx, name in rbg_data.data_to_input.items()}
         self._actions = []
