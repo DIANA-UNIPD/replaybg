@@ -23,10 +23,10 @@ from utils.agata_analysis import analyze_twin
 
 if __name__ == '__main__':
     freeze_support()
-    df = pd.read_parquet("data_day_1.parquet")
+    df = pd.read_parquet("data_day_1_2.parquet")
     df['t'] = pd.to_datetime(df['t'])
     save_folder = os.path.join(os.path.abspath(''), 'results')
-    save_name = 'multi_meal_day_1'
+    save_name = 'multi_meal_day_1_2'
 
     # Impute breakfast (clearly missing)
     df.loc[10, 'cho'] = 10
@@ -75,7 +75,7 @@ if __name__ == '__main__':
                       model=model,
                       unknown_parameters_prior=unknown_parameters_prior,
                       correlations=correlations,
-                      parallelize=True, n_jobs=-1, n_starts=128,
+                      parallelize=True, n_jobs=-1, n_starts=8,
                       log_history=False,
                       path=save_folder, save_name=save_name)
 

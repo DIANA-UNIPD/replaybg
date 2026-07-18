@@ -17,10 +17,13 @@ from utils.plot_common import (
     IMPULSE_MAX_DUTY,
     KIND_DENSE,
     attach_hover,
+    draw_segment_boundaries,
     resolve_input_layout,
+    segment_offsets,
     series,
 )
-from utils.plot_replay import _resolve_action_field, plot_replay
+from utils.plot_replay import _resolve_action_field, plot_replay, plot_replay_intervals
+from utils.plot_twinning import plot_twinning_intervals
 from utils.plot_twinning_history import plot_twinning_history
 
 
@@ -368,3 +371,208 @@ def test_hover_skips_empty_series():
     ax.plot([], [])
     crosshair = attach_hover(fig, [ax], {ax: [series("gone", [], [], KIND_DENSE)]})
     assert crosshair._readout(ax, 1.0) == ""
+
+
+# --- interval (glued) plots -------------------------------------------------
+
+def _labeled(ax, label):
+    """Returns the (x, y) of the line on ``ax`` carrying ``label``."""
+    line = next(l for l in ax.lines if l.get_label() == label)
+    return np.asarray(line.get_xdata()), np.asarray(line.get_ydata())
+
+
+def _boundary_xs(ax):
+    """Returns the x positions of the dotted segment separators on ``ax``."""
+    return sorted({float(np.asarray(l.get_xdata())[0]) for l in ax.lines
+                   if l.get_linestyle() == ":" and len(np.unique(l.get_xdata())) == 1})
+
+
+class _FakeModel:
+    """Minimal model honouring the ``reset``/``step``/``output`` contract.
+
+    ``output(t)`` just replays a precomputed trace, so the interval plotters can
+    be exercised without a Numba model.
+    """
+
+    def __init__(self, out):
+        self._out = np.asarray(out, dtype=float)
+
+    def reset(self, theta):
+        pass
+
+    def step(self, u, t):
+        pass
+
+    def output(self, t):
+        return self._out[t]
+
+
+class _FakeData:
+    """Minimal ``rbg_data`` exposing what the twinning plotters read."""
+
+    def __init__(self, out, y, y_idxs, yts=5):
+        out = np.asarray(out, dtype=float)
+        self.tsteps = out.shape[0]
+        self.u = np.zeros((self.tsteps, 4))
+        self.u[5, 0] = 40.0          # meal impulse
+        self.u[8, 1] = 2.0           # bolus impulse
+        self.u[:, 2] = 0.3           # basal dense
+        self.u[:, 3] = np.arange(self.tsteps) / 60.0
+        self.data_to_input = DATA_TO_INPUT
+        self.y = np.asarray(y, dtype=float)
+        self.y_idxs = np.asarray(y_idxs)
+        self.yts = yts
+
+
+def _twin_segment(out, y_idxs):
+    """Builds a ``plot_twinning_intervals`` segment from a precomputed trace."""
+    y = np.full(out.shape[0] // 5, np.nan)
+    y[y_idxs] = 100.0
+    data = _FakeData(out, y, y_idxs)
+    return {"rbg_data": data, "model": _FakeModel(out), "theta": None}
+
+
+def _replay_segment(tsteps, base, actions, with_measurement=False):
+    """Builds a ``replay()``-shaped dict with a known linear output trace."""
+    inputs = np.zeros((tsteps, 4))
+    inputs[5, 0] = 40.0
+    inputs[8, 1] = 2.0
+    inputs[:, 2] = 0.3
+    inputs[:, 3] = np.arange(tsteps) / 60.0
+    seg = {
+        "output": base + np.arange(tsteps, dtype=float),
+        "input": inputs,
+        "data_to_input": DATA_TO_INPUT,
+        "actions": actions,
+    }
+    if with_measurement:
+        seg["measurement"] = base + np.arange(tsteps, dtype=float)
+        seg["measurement_time"] = np.arange(tsteps)
+    return seg
+
+
+def test_segment_offsets_lays_segments_end_to_end():
+    """Offsets accumulate segment lengths; boundaries are the inner joins."""
+    starts, boundaries = segment_offsets([100, 60, 40], ts_min=1.0)
+    assert starts == [0.0, 100.0, 160.0]
+    assert boundaries == [100.0, 160.0]
+
+
+def test_segment_offsets_scales_by_ts_min():
+    """A step longer than a minute stretches the offsets accordingly."""
+    starts, boundaries = segment_offsets([100, 60], ts_min=5.0)
+    assert starts == [0.0, 500.0]
+    assert boundaries == [500.0]
+
+
+def test_segment_offsets_single_segment_has_no_boundary():
+    """One segment starts at zero and has no inner join to separate."""
+    starts, boundaries = segment_offsets([100], ts_min=1.0)
+    assert starts == [0.0]
+    assert boundaries == []
+
+
+def test_draw_segment_boundaries_marks_each_join():
+    """Every boundary time becomes a dotted vertical separator."""
+    fig, ax = plt.subplots()
+    draw_segment_boundaries(ax, [100.0, 160.0])
+    assert _boundary_xs(ax) == [100.0, 160.0]
+
+
+def test_plot_twinning_intervals_glues_the_fit_across_segments():
+    """The fit line spans every segment on one continuous axis."""
+    seg1 = _twin_segment(np.arange(100, dtype=float), y_idxs=[0, 10, 19])
+    seg2 = _twin_segment(1000 + np.arange(60, dtype=float), y_idxs=[0, 5, 11])
+    fig = plot_twinning_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                  mask_inputs=[3], hover=False)
+
+    x, y = _labeled(_panel(fig, "Twinning fit (2 segments)"), "Fit")
+    assert x.min() == 0 and x.max() == 159        # 100 + 60 steps, glued
+    assert y[100] == 1000                          # second segment starts here
+
+
+def test_plot_twinning_intervals_offsets_observations():
+    """Each segment's observations land on the glued axis, not overlapping."""
+    seg1 = _twin_segment(np.arange(100, dtype=float), y_idxs=[0, 19])
+    seg2 = _twin_segment(np.arange(60, dtype=float), y_idxs=[0, 11])
+    fig = plot_twinning_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                  mask_inputs=[3], hover=False)
+
+    obs_x, _ = _labeled(_panel(fig, "Twinning fit (2 segments)"), "Data")
+    # seg1 obs at 0, 95; seg2 obs offset by 100 -> 100, 155.
+    assert list(obs_x) == [0.0, 95.0, 100.0, 155.0]
+
+
+def test_plot_twinning_intervals_separates_days_on_every_panel():
+    """A dotted boundary sits at the join on the fit and every input panel."""
+    seg1 = _twin_segment(np.arange(100, dtype=float), y_idxs=[0])
+    seg2 = _twin_segment(np.arange(60, dtype=float), y_idxs=[0])
+    fig = plot_twinning_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                  mask_inputs=[3], hover=False)
+    assert len(fig.axes) == 2                       # fit + one input group
+    for ax in fig.axes:
+        assert _boundary_xs(ax) == [100.0]
+
+
+def test_plot_twinning_intervals_rejects_empty():
+    """No segments is a programming error, not an empty figure."""
+    with pytest.raises(ValueError):
+        plot_twinning_intervals([])
+
+
+def test_plot_replay_intervals_glues_output_across_segments():
+    """The replayed output spans every segment on one continuous axis."""
+    seg1 = _replay_segment(100, 0.0, [])
+    seg2 = _replay_segment(60, 1000.0, [])
+    fig = plot_replay_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                mask_inputs=[3], hover=False)
+
+    x, y = _labeled(_panel(fig, "Output (2 segments)"), "Output")
+    assert x.min() == 0 and x.max() == 159
+    assert y[100] == 1000
+
+
+def test_plot_replay_intervals_offsets_action_times():
+    """A callback's step index is shifted by the preceding segments' length."""
+    seg1 = _replay_segment(100, 0.0,
+                           [{"k": 30, "callback": "CorrectionBolus", "cb_u": 1.5}])
+    seg2 = _replay_segment(60, 0.0,
+                           [{"k": 10, "callback": "CorrectionBolus", "cb_u": 2.5}])
+    fig = plot_replay_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                mask_inputs=[3], hover=False)
+
+    x, y = _markers(_panel(fig, "Callback: CorrectionBolus"))
+    assert list(x) == [30, 110]                     # 10 offset by the 100-step day 1
+    assert list(y) == [1.5, 2.5]
+
+
+def test_plot_replay_intervals_shows_measurements_only_when_all_have_them():
+    """Measurement markers appear only if every segment carries a sensor sample."""
+    both = [_replay_segment(50, 0.0, [], with_measurement=True),
+            _replay_segment(50, 100.0, [], with_measurement=True)]
+    fig = plot_replay_intervals(both, input_groups=[[0, 1, 2]], mask_inputs=[3], hover=False)
+    labels = [l.get_label() for l in _panel(fig, "Output (2 segments)").lines]
+    assert "Measurement" in labels
+
+    mixed = [_replay_segment(50, 0.0, [], with_measurement=True),
+             _replay_segment(50, 100.0, [], with_measurement=False)]
+    fig = plot_replay_intervals(mixed, input_groups=[[0, 1, 2]], mask_inputs=[3], hover=False)
+    labels = [l.get_label() for l in _panel(fig, "Output (2 segments)").lines]
+    assert "Measurement" not in labels
+
+
+def test_plot_replay_intervals_separates_days_on_every_panel():
+    """A dotted boundary sits at the join on the output and every input panel."""
+    seg1 = _replay_segment(100, 0.0, [])
+    seg2 = _replay_segment(60, 0.0, [])
+    fig = plot_replay_intervals([seg1, seg2], input_groups=[[0, 1, 2]],
+                                mask_inputs=[3], hover=False)
+    assert len(fig.axes) == 2                       # output + one input group
+    for ax in fig.axes:
+        assert _boundary_xs(ax) == [100.0]
+
+
+def test_plot_replay_intervals_rejects_empty():
+    """No segments is a programming error, not an empty figure."""
+    with pytest.raises(ValueError):
+        plot_replay_intervals([])

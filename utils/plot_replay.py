@@ -5,10 +5,12 @@ from utils.plot_common import (
     KIND_DENSE,
     KIND_SPARSE,
     draw_input_group,
+    draw_segment_boundaries,
     draw_thresholds,
     finalize,
     make_figure,
     resolve_input_layout,
+    segment_offsets,
     series,
     set_panel_title,
 )
@@ -151,6 +153,162 @@ def plot_replay(
                                        markerfmt="o", basefmt=" ")
             plt.setp(markerline, color="tab:purple", markersize=4)
             hover_series[ax] = [series(field, ks, values, KIND_SPARSE)]
+        ax.set_ylabel(field or "")
+        set_panel_title(ax, f"Callback: {cb_name}")
+
+    finalize(fig, axes, "Time (min)", hover_series, hover, x_fmt="t = {:.0f} min")
+    return fig
+
+
+def plot_replay_intervals(
+    replay_results_list: list[dict],
+    thresholds: list[float] | None = None,
+    input_groups: list[list[int]] | None = None,
+    mask_inputs: list[int] | None = None,
+    action_field: str | None = None,
+    ts_min: float = 1.0,
+    output_label: str = "Output",
+    measurement_label: str = "Measurement",
+    figsize: tuple[float, float] | None = None,
+    hover: bool = True,
+) -> plt.Figure:
+    """Plot several x0-chained ``replay()`` segments as one continuous figure.
+
+    The "interval" workflow replays one day, carries its final state into the
+    next (via ``x0``/``theta_prev``), and repeats. Each day is a separate replay;
+    this utility glues them back together — laying the segments end to end on a
+    single time axis — so the multi-day replay reads as one trace. It is the
+    multi-segment counterpart of :func:`plot_replay` and produces the same panel
+    layout (output, inputs, one panel per distinct callback), with a dotted
+    vertical separator marking each join between consecutive days.
+
+    Each segment must expose the same input-channel layout (``data_to_input``),
+    taken from the first. Measurement markers are shown only when *every* segment
+    carries a sensor measurement.
+
+    Parameters
+    ----------
+    replay_results_list : list of dict
+        The per-day dicts returned by :meth:`ReplayBG.replay`, in chronological
+        order. Each must contain ``output``, ``input``, ``data_to_input`` and
+        ``actions``; ``measurement``/``measurement_time`` are used when present
+        on all segments.
+    thresholds : list of float or None, optional, default : None
+        Optional reference levels drawn as dashed horizontal lines on the output
+        subplot. Two or more levels also shade the span between the outermost.
+    input_groups : list of list of int or None, optional, default : None
+        Optional list of channel-index groups, each becoming one overlaid
+        subplot. ``None`` plots one channel per subplot, in ``data_to_input``
+        order.
+    mask_inputs : list of int or None, optional, default : None
+        Optional list of channel indices to hide, e.g. the ``t_hour`` index.
+    action_field : str or None, optional, default : None
+        Name of the scalar field to plot for each callback action, as in
+        :func:`plot_replay`. ``None`` resolves it per callback automatically.
+    ts_min : float, optional, default : 1.0
+        Minutes represented by one integration step, used to scale the time axis.
+    output_label : str, optional, default : "Output"
+        Legend label for the replayed output line.
+    measurement_label : str, optional, default : "Measurement"
+        Legend label for the replayed measurement markers.
+    figsize : tuple of float or None, optional, default : None
+        Optional figure size. Defaults to a height that grows with the number of
+        subplots.
+    hover : bool, optional, default : True
+        Whether to attach the interactive readout. Ignored on non-interactive
+        backends.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        The assembled figure.
+    """
+    if not replay_results_list:
+        raise ValueError("replay_results_list must contain at least one segment")
+
+    data_to_input = replay_results_list[0]["data_to_input"]
+
+    # --- glue outputs and inputs end to end ----------------------------------
+    outputs = [np.asarray(r["output"]) for r in replay_results_list]
+    inputs_list = [np.asarray(r["input"]) for r in replay_results_list]
+    tsteps_list = [o.shape[0] for o in outputs]
+    starts, boundaries = segment_offsets(tsteps_list, ts_min)
+    step_starts = [int(round(s / ts_min)) for s in starts]
+
+    output = np.concatenate(outputs)
+    inputs = np.concatenate(inputs_list, axis=0)
+    t = np.concatenate([start + np.arange(n) * ts_min
+                        for start, n in zip(starts, tsteps_list)])
+
+    # Actions carry a step index local to their segment; offset each onto the
+    # glued axis so callback panels line up with the trace.
+    actions = []
+    for r, step_start in zip(replay_results_list, step_starts):
+        for rec in (r.get("actions") or []):
+            actions.append({**rec, "k": rec["k"] + step_start})
+
+    # Measurements are shown only when every segment produced them.
+    have_meas = all(r.get("measurement") is not None
+                    and r.get("measurement_time") is not None
+                    for r in replay_results_list)
+    meas_t, meas_v = None, None
+    if have_meas:
+        meas_t_parts, meas_v_parts = [], []
+        for r, start in zip(replay_results_list, starts):
+            m = np.asarray(r["measurement"])
+            mt = np.asarray(r["measurement_time"])
+            valid = np.isfinite(m)
+            meas_t_parts.append(start + mt[valid] * ts_min)
+            meas_v_parts.append(m[valid])
+        meas_t = np.concatenate(meas_t_parts)
+        meas_v = np.concatenate(meas_v_parts)
+
+    # --- resolve the subplot layout ------------------------------------------
+    input_groups, input_colors = resolve_input_layout(data_to_input, input_groups, mask_inputs)
+    callback_names = list(dict.fromkeys(rec["callback"] for rec in actions))
+
+    n_rows = 1 + len(input_groups) + len(callback_names)
+    fig, axes = make_figure(n_rows, figsize)
+    hover_series = {}
+
+    # --- 1. output subplot ---------------------------------------------------
+    ax = axes[0]
+    draw_thresholds(ax, thresholds)
+    ax.plot(t, output, color="tab:blue", linewidth=1.2, label=output_label)
+    hover_series[ax] = [series(output_label, t, output, KIND_DENSE)]
+    if have_meas:
+        ax.plot(
+            meas_t, meas_v,
+            linestyle="none", marker="o", markersize=3,
+            color="tab:red", alpha=0.7, label=measurement_label,
+        )
+        hover_series[ax].append(series(measurement_label, meas_t, meas_v, KIND_SPARSE))
+    draw_segment_boundaries(ax, boundaries)
+    ax.set_ylabel(output_label)
+    set_panel_title(ax, f"Output ({len(replay_results_list)} segments)")
+    ax.legend(fontsize="small", loc="upper right", framealpha=0.9)
+
+    # --- 2. input subplots ---------------------------------------------------
+    for row, group in enumerate(input_groups, start=1):
+        hover_series[axes[row]] = draw_input_group(
+            axes[row], t, inputs, group, data_to_input, input_colors)
+        draw_segment_boundaries(axes[row], boundaries)
+
+    # --- 3. callback action subplots -----------------------------------------
+    base = 1 + len(input_groups)
+    for row, cb_name in enumerate(callback_names, start=base):
+        ax = axes[row]
+        records = [rec for rec in actions if rec["callback"] == cb_name]
+        field = _resolve_action_field(records, action_field)
+        ks = np.array([rec["k"] * ts_min for rec in records if field in rec])
+        values = np.array([rec[field] for rec in records if field in rec], dtype=float)
+        hover_series[ax] = []
+        if ks.size:
+            markerline, _, _ = ax.stem(ks, values, linefmt="tab:purple",
+                                       markerfmt="o", basefmt=" ")
+            plt.setp(markerline, color="tab:purple", markersize=4)
+            hover_series[ax] = [series(field, ks, values, KIND_SPARSE)]
+        draw_segment_boundaries(ax, boundaries)
         ax.set_ylabel(field or "")
         set_panel_title(ax, f"Callback: {cb_name}")
 

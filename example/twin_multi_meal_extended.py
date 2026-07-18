@@ -77,7 +77,7 @@ if __name__ == '__main__':
     result = rbg.twin(rbg_data=rbg_data,
                       model=model,
                       unknown_parameters_prior=unknown_parameters_prior,
-                      parallelize=True, n_jobs=-1, n_starts=4,
+                      parallelize=True, n_jobs=-1, n_starts=64,
                       log_history=False,
                       path=save_folder, save_name=save_name)
 

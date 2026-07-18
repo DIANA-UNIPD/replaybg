@@ -35,6 +35,11 @@ HOVER_SNAP_FRACTION = 0.02
 _THRESHOLD_COLOR = "0.45"
 _BAND_COLOR = "tab:green"
 
+# Styling for the separators drawn between glued segments (see the interval
+# plotters). Kept above the grid but below the data, so it delimits without
+# competing with the traces.
+_BOUNDARY_COLOR = "0.55"
+
 
 def series(label: str, x, y, kind: str = KIND_DENSE) -> dict:
     """Returns a hover-readout descriptor for one plotted series.
@@ -230,6 +235,55 @@ def draw_thresholds(ax, thresholds: list[float] | None) -> None:
         ax.axhspan(levels[0], levels[-1], color=_BAND_COLOR, alpha=0.06, zorder=0)
     for level in levels:
         ax.axhline(level, linestyle="--", color=_THRESHOLD_COLOR, linewidth=0.8, zorder=1)
+
+
+def segment_offsets(tsteps_list: list[int], ts_min: float = 1.0):
+    """Returns the per-segment time offsets and the inner boundary times.
+
+    Gluing several segments onto one time axis means laying them end to end: the
+    second segment starts where the first ends, and so on. This computes, in the
+    x units of the axis, where each segment begins and where the joins fall, so
+    the interval plotters offset every segment the same way and draw the same
+    separators.
+
+    Parameters
+    ----------
+    tsteps_list : list of int
+        The number of integration steps in each segment, in draw order.
+    ts_min : float, optional, default : 1.0
+        Minutes represented by one integration step, used to scale the offsets.
+
+    Returns
+    -------
+    tuple of (list of float, list of float)
+        The start time of each segment (one per segment, first is ``0``) and the
+        times of the inner boundaries (the joins between consecutive segments;
+        empty for a single segment).
+    """
+    starts = [0.0]
+    for n in tsteps_list[:-1]:
+        starts.append(starts[-1] + n * ts_min)
+    boundaries = starts[1:]
+    return starts, boundaries
+
+
+def draw_segment_boundaries(ax, boundary_times: list[float] | None) -> None:
+    """Draws vertical separators where glued segments meet.
+
+    Each boundary is a thin dotted line spanning the panel, marking the join
+    between two segments so the stack reads as glued-but-delimited without
+    hiding the trace that crosses it.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to draw on.
+    boundary_times : list of float or None
+        The x positions of the joins, as returned by :func:`segment_offsets`.
+        ``None`` or empty draws nothing.
+    """
+    for x in boundary_times or []:
+        ax.axvline(x, linestyle=":", color=_BOUNDARY_COLOR, linewidth=0.9, zorder=2)
 
 
 def finalize(fig, axes, xlabel: str, hover_series: dict | None = None,
