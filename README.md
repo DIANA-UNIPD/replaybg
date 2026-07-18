@@ -183,12 +183,17 @@ reloads it. `get_started.py` keeps everything in memory instead.
 
 ## Documentation
 
-Full API docs are built with MkDocs:
+The full documentation — getting-started guide, blueprints, twinning, replay,
+callbacks, sensors, plotting, analysis, and an auto-generated API reference — is
+built with MkDocs (Material theme):
 
 ```bash
 uv run mkdocs serve      # live-reload at http://127.0.0.1:8000
 uv run mkdocs build      # static site into site/
 ```
+
+Sources live in [`docs/`](docs/); the site is deployed to GitHub Pages by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) on every push to `main`.
 
 ## Testing
 
@@ -216,6 +221,23 @@ for the per-module breakdown.
 
 ## Reference
 
-If you use ReplayBG in your research, please cite the ReplayBG methodology.
+If you use ReplayBG in your research, please cite:
 
-> _Citation to be added — fill in the BibTeX for the ReplayBG paper._
+> G. Cappon, M. Vettoretti, G. Sparacino, S. Del Favero, and A. Facchinetti, "ReplayBG: A
+> Digital Twin-Based Methodology to Identify a Personalized Model From Type 1 Diabetes Data and
+> Simulate Glucose Concentrations to Assess Alternative Therapies," *IEEE Transactions on
+> Biomedical Engineering*, vol. 70, no. 11, pp. 3227–3238, Nov. 2023,
+> doi: [10.1109/TBME.2023.3286856](https://doi.org/10.1109/TBME.2023.3286856).
+
+```bibtex
+@article{cappon2023replaybg,
+  author  = {Cappon, Giacomo and Vettoretti, Martina and Sparacino, Giovanni and Del Favero, Simone and Facchinetti, Andrea},
+  title   = {{ReplayBG}: A Digital Twin-Based Methodology to Identify a Personalized Model From Type 1 Diabetes Data and Simulate Glucose Concentrations to Assess Alternative Therapies},
+  journal = {IEEE Transactions on Biomedical Engineering},
+  volume  = {70},
+  number  = {11},
+  pages   = {3227--3238},
+  year    = {2023},
+  doi     = {10.1109/TBME.2023.3286856},
+}
+```
