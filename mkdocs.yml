@@ -4,10 +4,14 @@ site_url: https://DIANA-UNIPD.github.io/replaybg/
 repo_url: https://github.com/DIANA-UNIPD/replaybg
 repo_name: DIANA-UNIPD/replaybg
 edit_uri: edit/main/docs/
+copyright: Made with ❤️ by Giacomo Cappon
+
+extra:
+  generator: false
 
 theme:
   name: material
-  logo: assets/images/replay-bg-logo.png
+  custom_dir: overrides
   favicon: assets/images/replay-bg-logo.png
   icon:
     repo: fontawesome/brands/github
@@ -25,15 +29,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue
-      accent: orange
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue
-      accent: orange
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode

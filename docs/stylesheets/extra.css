@@ -1,10 +1,18 @@
 /* ---- ReplayBG docs custom styles ---- */
 
 :root {
-  --md-primary-fg-color: #2b6cb0;
-  --md-primary-fg-color--light: #4299e1;
-  --md-primary-fg-color--dark: #2c5282;
-  --md-accent-fg-color: #dd6b20;
+  /* ReplayBG logo red */
+  --md-primary-fg-color: #cb5147;
+  --md-primary-fg-color--light: #d97066;
+  --md-primary-fg-color--dark: #a83e35;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+  --md-accent-fg-color: #b23a30;
+}
+
+/* Keep links/hover legible in dark mode */
+[data-md-color-scheme="slate"] {
+  --md-accent-fg-color: #e8837a;
 }
 
 /* ---- Hero (home page) ---- */
@@ -17,10 +25,10 @@
 }
 
 .rbg-hero img {
-  width: 200px;
-  max-width: 60%;
+  width: 320px;
+  max-width: 80%;
   height: auto;
-  margin-bottom: 1rem;
+  margin-bottom: 1.2rem;
 }
 
 .rbg-hero h1 {
@@ -83,4 +91,66 @@
   display: block;
   margin: 1.2rem auto;
   max-width: 100%;
+}
+
+/* ---- Header: site name (no logo) + inline top-level nav ---- */
+.md-header__site-name {
+  color: inherit;
+  font-weight: 700;
+}
+
+.md-header__site-name:hover {
+  color: inherit;
+}
+
+/* Inline navigation menu, aligned on the search-toolbar row */
+.md-header__nav {
+  display: flex;
+  align-items: center;
+  margin-left: 1.2rem;
+}
+
+.md-header__nav-list {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-header__nav .md-tabs__item {
+  height: auto;
+  display: flex;
+  opacity: 1;
+}
+
+.md-header__nav .md-tabs__link {
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--md-primary-bg-color);
+  opacity: 0.82;
+  border-radius: 0.2rem;
+  white-space: nowrap;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.md-header__nav .md-tabs__link:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.md-header__nav .md-tabs__item--active .md-tabs__link {
+  opacity: 1;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Collapse the inline nav on smaller screens; the drawer takes over */
+@media screen and (max-width: 76.1875em) {
+  .md-header__nav {
+    display: none;
+  }
 }
