@@ -72,7 +72,7 @@ second-occurrence parameters:
 ## Example
 
 A complete extended twinning example lives in
-[`example/twin_multi_meal_extended.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_multi_meal_extended.py).
+[`example/twin_multi_meal_extended.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_multi_meal_extended.py).
 Its `unknown_parameters_prior` is the multi-meal one plus the extra second-day
 entries:
 

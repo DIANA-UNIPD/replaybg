@@ -102,7 +102,7 @@ ones qualify). Passing `None` treats parameters as independent. See
 
 To twin a single meal or a single day, build the blueprint and call `twin()`. This
 single-meal example (see
-[`example/twin_single_meal.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_single_meal.py))
+[`example/twin_single_meal.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_single_meal.py))
 also records the optimisation history and saves the results:
 
 ```python
@@ -168,8 +168,8 @@ the blueprint classes and the parameters you estimate:
     # additionally estimate kabs_B2/L2/S2, beta_B2/L2/S2, SI_B2
     ```
 
-See [`example/twin_multi_meal.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_multi_meal.py)
-and [`example/twin_multi_meal_extended.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_multi_meal_extended.py).
+See [`example/twin_multi_meal.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_multi_meal.py)
+and [`example/twin_multi_meal_extended.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_multi_meal_extended.py).
 
 ## Twinning multi-day intervals
 
@@ -223,7 +223,7 @@ for n, day_df in enumerate(day_dfs, start=1):
 
 The full runnable version — including a carry-over continuity check and a stitched
 multi-day plot — is
-[`example/twin_multi_meal_intervals.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_multi_meal_intervals.py).
+[`example/twin_multi_meal_intervals.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_multi_meal_intervals.py).
 
 !!! warning "Use the same `u2ss` across the interval"
     Cutting at 04:00 keeps each day's B/L/D/S meal structure and the overnight

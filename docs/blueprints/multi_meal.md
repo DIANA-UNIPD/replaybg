@@ -96,6 +96,6 @@ point far from the last recorded insulin/meal input. See
 ## Example
 
 A complete multi-meal twinning example lives in
-[`example/twin_multi_meal.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_multi_meal.py).
+[`example/twin_multi_meal.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_multi_meal.py).
 The `unknown_parameters_prior` used there is exactly the one shown in
 [Getting Started](../getting_started.md#step-1-create-the-digital-twin-twin).

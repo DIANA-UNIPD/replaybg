@@ -1,8 +1,8 @@
 site_name: ReplayBG
 site_description: A digital-twin based framework for the development and assessment of new algorithms for type 1 diabetes management
-site_url: https://SHIELD-UNIPD.github.io/replaybg/
-repo_url: https://github.com/SHIELD-UNIPD/replaybg
-repo_name: SHIELD-UNIPD/replaybg
+site_url: https://DIANA-UNIPD.github.io/replaybg/
+repo_url: https://github.com/DIANA-UNIPD/replaybg
+repo_name: DIANA-UNIPD/replaybg
 edit_uri: edit/main/docs/
 
 theme:

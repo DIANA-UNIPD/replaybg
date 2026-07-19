@@ -3,7 +3,7 @@
 This page walks you through your first end-to-end ReplayBG session: **install**,
 **twin** a physiological model to a day of data, and **replay** the twin — first
 as-is, then under a counterfactual "what-if" scenario. It mirrors the runnable
-[`example/get_started.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/get_started.py)
+[`example/get_started.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/get_started.py)
 script.
 
 ## Installation
@@ -13,7 +13,7 @@ ReplayBG is not published on PyPI — run it from a clone. It requires
 management.
 
 ```bash
-git clone https://github.com/SHIELD-UNIPD/replaybg
+git clone https://github.com/DIANA-UNIPD/replaybg
 cd replaybg
 uv sync
 ```

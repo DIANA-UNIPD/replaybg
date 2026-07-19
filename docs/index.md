@@ -15,7 +15,7 @@ new algorithms for type 1 diabetes management.</p>
 
 <div class="rbg-cta" markdown>
 [Get Started](getting_started.md){ .md-button .md-button--primary }
-[View on GitHub](https://github.com/SHIELD-UNIPD/replaybg){ .md-button }
+[View on GitHub](https://github.com/DIANA-UNIPD/replaybg){ .md-button }
 </div>
 
 </div>

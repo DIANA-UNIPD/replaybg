@@ -151,7 +151,7 @@ Two ready-made policies live in `callbacks`:
 
 This replays a previously-saved twin twice — a plain baseline, and a controlled run
 with a correction-bolus + hypo-treatment policy acting on a **noisy CGM sensor**
-(see [`example/replay_with_callbacks.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/replay_with_callbacks.py)):
+(see [`example/replay_with_callbacks.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/replay_with_callbacks.py)):
 
 ```python
 from multiprocessing import freeze_support
@@ -205,7 +205,7 @@ with `pd.DataFrame(results['actions'])`.
 Just like [interval twinning](twinning.md#twinning-multi-day-intervals), replay a
 multi-day recording one day at a time, carrying each day's final state into the
 next via `x0` / `theta_prev` when constructing the model. See
-[`example/replay_multi_meal_intervals.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/replay_multi_meal_intervals.py).
+[`example/replay_multi_meal_intervals.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/replay_multi_meal_intervals.py).
 
 ## Saving and visualizing
 

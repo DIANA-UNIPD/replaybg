@@ -103,7 +103,7 @@ insulin/meal input. See [Choosing Data for Twinning](../data_requirements.md).
 ## Example
 
 A complete single-meal twinning example lives in
-[`example/twin_single_meal.py`](https://github.com/SHIELD-UNIPD/replaybg/blob/main/example/twin_single_meal.py):
+[`example/twin_single_meal.py`](https://github.com/DIANA-UNIPD/replaybg/blob/main/example/twin_single_meal.py):
 
 ```python
 from data.single_meal_t1d_data import SingleMealT1DData
