@@ -3,4 +3,4 @@
 The MAP optimiser behind `ReplayBG.twin()` (multi-start Powell, optional
 parallelism).
 
-::: twinner.twinner.Twinner
+::: py_replay_bg.twinner.twinner.Twinner

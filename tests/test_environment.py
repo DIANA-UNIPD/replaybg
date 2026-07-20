@@ -1,7 +1,7 @@
 """Tests for ``environment`` — the ``Environment`` holder and the ``identity``
 decorator used as the ``DEBUG`` fallback for Numba's ``njit``/``jitclass``.
 """
-from environment import Environment, identity
+from py_replay_bg.environment import Environment, identity
 
 
 def test_environment_defaults():

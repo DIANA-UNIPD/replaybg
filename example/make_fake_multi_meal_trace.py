@@ -26,9 +26,9 @@ import os
 import numpy as np
 import pandas as pd
 
-from data.multi_meal_t1d_data import MultiMealT1DData
-from model.multi_meal_t1d import MultiMealT1DModel
-from replaybg import ReplayBG
+from py_replay_bg.data.multi_meal_t1d_data import MultiMealT1DData
+from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel
+from py_replay_bg import ReplayBG
 
 # --- Scenario constants -----------------------------------------------------
 YTS = 5                       # data sampling period (minutes) == data.yts

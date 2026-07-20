@@ -19,12 +19,12 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from data.multi_meal_t1d_data import MultiMealT1DData
-from model.multi_meal_t1d import MultiMealT1DModel
-from distributions import Normal, Gamma, LogNormal, Uniform
-from utils.agata_analysis import analyze_twin
-from utils.plot_twinning import plot_twinning_intervals, _simulate
-from replaybg import ReplayBG
+from py_replay_bg.data.multi_meal_t1d_data import MultiMealT1DData
+from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel
+from py_replay_bg.distributions import Normal, Gamma, LogNormal, Uniform
+from py_replay_bg.utils.agata_analysis import analyze_twin
+from py_replay_bg.utils.plot_twinning import plot_twinning_intervals, _simulate
+from py_replay_bg import ReplayBG
 
 
 def split_days(df: pd.DataFrame) -> list[pd.DataFrame]:

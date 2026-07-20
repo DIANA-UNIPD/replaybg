@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from scipy import special, stats
 
-from distributions import Gamma, LogNormal, Normal, Uniform
+from py_replay_bg.distributions import Gamma, LogNormal, Normal, Uniform
 
 
 # --------------------------------------------------------------------------- #

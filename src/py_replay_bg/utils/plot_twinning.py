@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.numba_dicts import to_typed_f64_dict
-from utils.plot_common import (
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.utils.plot_common import (
     KIND_DENSE,
     KIND_SPARSE,
     draw_input_group,

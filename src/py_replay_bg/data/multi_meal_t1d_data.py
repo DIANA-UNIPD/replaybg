@@ -3,17 +3,17 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from environment import Environment
+from py_replay_bg.environment import Environment
 
 
-class SingleMealT1DData:
+class MultiMealT1DData:
     """Prepare and store time-series data for the ReplayBG simulation pipeline.
 
     The class converts a pandas dataframe into the arrays and metadata needed by
     the model and twinning procedure. It extracts time, glucose, insulin, and
     meal information, and organizes them into regularly sampled vectors that can
-    be consumed by the simulator. This variant handles a single (unlabelled)
-    meal channel.
+    be consumed by the simulator. This variant handles multiple labelled daily
+    meals (breakfast, lunch, dinner, snack, hypo-treatment).
 
     ...
     Attributes
@@ -92,13 +92,20 @@ class SingleMealT1DData:
             expected format.
         """
         if data_to_input is None:
-            self.data_to_input = {0: 'meal',
-                                  1: 'bolus',
-                                  2: 'basal',
-                                  3: 'forcing_ip',
-                                  4: 'forcing_ra'}
+            self.data_to_input = {0: 'meal_B',
+                                  1: 'meal_L',
+                                  2: 'meal_D',
+                                  3: 'meal_S',
+                                  4: 'meal_H',
+                                  5: 'bolus',
+                                  6: 'basal',
+                                  7: 't_hour',
+                                  8: 'forcing_ip',
+                                  9: 'forcing_ra'}
         else:
             self.data_to_input = data_to_input
+
+        data = data.reset_index(drop=True)
 
         self.u2ss = np.mean(data.basal.values) * 1000 / body_weight
         self.body_weight = body_weight
@@ -152,6 +159,8 @@ class SingleMealT1DData:
         self.t_min = np.zeros([self.tsteps, ])  # minutes in the data for each integration step
         t_m = np.array(data.t.dt.minute.values).astype(int)
         t_h = np.array(data.t.dt.hour.values).astype(int)
+
+        self.t_start = t_h[0] * 60 + t_m[0]
 
         for t in range(data.shape[0]):
             self.t_hour[(t * self.yts):((t + 1) * self.yts)] = t_h[t]
@@ -217,6 +226,12 @@ class SingleMealT1DData:
         # Initialize the meal type vector
         self.meal_type = np.empty([self.tsteps, ], dtype=str)
 
+        self.meal_B = np.zeros([self.tsteps, ])
+        self.meal_L = np.zeros([self.tsteps, ])
+        self.meal_D = np.zeros([self.tsteps, ])
+        self.meal_S = np.zeros([self.tsteps, ])
+        self.meal_H = np.zeros([self.tsteps, ])
+
         self.meal_data = data.cho.values
 
         # Find the meals
@@ -228,7 +243,24 @@ class SingleMealT1DData:
                 i]] * (1000 / self.body_weight)  # mg/(kg*min)
             self.meal_announcement[(m_idx[i] * self.yts)] = data['cho'][m_idx[i]] * self.yts  # mg/(kg*min)
 
-            self.meal_type[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = '-'
+            self.meal_type[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = data['cho_label'][m_idx[i]]
+
+            if data['cho_label'][m_idx[i]] == 'B':
+                self.meal_B[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'L':
+                self.meal_L[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'D':
+                self.meal_D[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'S':
+                self.meal_S[(m_idx[i] * self.yts):(
+                        (m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'H':
+                self.meal_H[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
 
     def __setup_u(self):
         """Builds the combined model input matrix from configured inputs.

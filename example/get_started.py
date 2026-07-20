@@ -29,14 +29,14 @@ import matplotlib.pyplot as plt
 # this script is run directly, regardless of the current working directory.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from replaybg import ReplayBG
-from data.multi_meal_t1d_data import MultiMealT1DData
-from model.multi_meal_t1d import MultiMealT1DModel
-from distributions import Normal, Gamma, LogNormal, Uniform
-from utils.numba_dicts import to_typed_f64_dict
-from utils.plot_twinning import plot_twinning
-from utils.plot_replay import plot_replay
-from utils.agata_analysis import analyze_replay
+from py_replay_bg import ReplayBG
+from py_replay_bg.data.multi_meal_t1d_data import MultiMealT1DData
+from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel
+from py_replay_bg.distributions import Normal, Gamma, LogNormal, Uniform
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.utils.plot_twinning import plot_twinning
+from py_replay_bg.utils.plot_replay import plot_replay
+from py_replay_bg.utils.agata_analysis import analyze_replay
 
 
 # ``twin(parallelize=True)`` uses multiprocessing, so the whole script must sit

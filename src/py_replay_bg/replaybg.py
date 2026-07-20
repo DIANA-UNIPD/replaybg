@@ -2,10 +2,10 @@ from typing import Dict
 
 import numpy as np
 
-from callbacks.context import ReplayContext
-from environment import Environment
-from twinner.twinner import Twinner
-from utils.save_results import save_results
+from py_replay_bg.callbacks.context import ReplayContext
+from py_replay_bg.environment import Environment
+from py_replay_bg.twinner.twinner import Twinner
+from py_replay_bg.utils.save_results import save_results
 
 
 class ReplayBG:

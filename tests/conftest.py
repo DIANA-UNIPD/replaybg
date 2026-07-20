@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from environment import Environment
+from py_replay_bg.environment import Environment
 
 
 @pytest.fixture

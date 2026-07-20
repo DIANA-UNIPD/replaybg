@@ -11,13 +11,13 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from data.multi_meal_extended_t1d_data import MultiMealExtendedT1DData
-from model.multi_meal_extended_t1d import MultiMealExtendedT1DModel
-from distributions import Normal, Gamma, LogNormal, Uniform
-from utils.agata_analysis import analyze_twin
-from utils.plot_twinning import plot_twinning
-from utils.plot_twinning_history import plot_twinning_history
-from replaybg import ReplayBG
+from py_replay_bg.data.multi_meal_extended_t1d_data import MultiMealExtendedT1DData
+from py_replay_bg.model.multi_meal_extended_t1d import MultiMealExtendedT1DModel
+from py_replay_bg.distributions import Normal, Gamma, LogNormal, Uniform
+from py_replay_bg.utils.agata_analysis import analyze_twin
+from py_replay_bg.utils.plot_twinning import plot_twinning
+from py_replay_bg.utils.plot_twinning_history import plot_twinning_history
+from py_replay_bg import ReplayBG
 
 
 if __name__ == '__main__':

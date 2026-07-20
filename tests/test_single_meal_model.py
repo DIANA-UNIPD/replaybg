@@ -30,10 +30,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from distributions import Gamma, LogNormal, Normal, Uniform
-from data.single_meal_t1d_data import SingleMealT1DData
-from model.single_meal_t1d import SingleMealT1DModel
-from twinner.twinner import Twinner
+from py_replay_bg.distributions import Gamma, LogNormal, Normal, Uniform
+from py_replay_bg.data.single_meal_t1d_data import SingleMealT1DData
+from py_replay_bg.model.single_meal_t1d import SingleMealT1DModel
+from py_replay_bg.twinner.twinner import Twinner
 
 
 EXAMPLE_DIR = Path(__file__).resolve().parents[1] / "example"
@@ -43,17 +43,17 @@ EXAMPLE_DIR = Path(__file__).resolve().parents[1] / "example"
 # from a real run; see the module docstring for when/how to regenerate.
 GOLDEN_X = {
     1: np.array([
-        118.47977090583834, 0.01897463544409741, 0.10991966371112584,
-        0.8552028954054943, 0.010766231400495799, 0.014665112234466256,
-        0.1096117986839381, 0.0006314401730194213, 0.01696724590290372,
+        118.54108897749562, 0.019282883234440454, 0.10975967000621162,
+        0.8623641267910293, 0.012116298233797338, 0.012500029840650557,
+        0.11895259960846845, 0.0006392117171368307, 0.01614734298527011,
         0.0,
     ]),
     # On this trace start 0 also happens to be the best of starts 0-3, so the
     # two settings currently agree; that is incidental, not a requirement.
     4: np.array([
-        118.47977090583834, 0.01897463544409741, 0.10991966371112584,
-        0.8552028954054943, 0.010766231400495799, 0.014665112234466256,
-        0.1096117986839381, 0.0006314401730194213, 0.01696724590290372,
+        118.54108897749562, 0.019282883234440454, 0.10975967000621162,
+        0.8623641267910293, 0.012116298233797338, 0.012500029840650557,
+        0.11895259960846845, 0.0006392117171368307, 0.01614734298527011,
         0.0,
     ]),
 }

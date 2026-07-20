@@ -115,7 +115,8 @@ class Twinner():
                  n_jobs: int | None = None,
                  n_starts: int = 64,
                  log_history: bool = False,
-                 verbose: bool = True
+                 verbose: bool = True,
+                 polish: bool = True,
     ):
         """Constructs all the necessary attributes for the Twinner object.
 
@@ -133,11 +134,19 @@ class Twinner():
             A boolean that specifies whether to record the optimisation history.
         verbose : bool, optional, default : True
             A boolean that specifies the verbosity of the twinner.
+        polish : bool, optional, default : True
+            A boolean that specifies whether to run a deterministic tight-tolerance
+            refinement of the best multi-start result. Powell's default line-search
+            tolerance stops early on the ill-conditioned (sloppy) physiological
+            likelihood; the polish restarts Powell from the best point with tight
+            tolerances until the objective stops improving, recovering the true
+            optimum. Off preserves the raw multi-start behaviour.
         """
         self.parallelize = parallelize
         self.n_jobs = -1 if n_jobs is None else n_jobs
         self.n_starts = n_starts
         self.verbose = verbose
+        self.polish = polish
 
         self.log_history = log_history
         if self.log_history:
@@ -242,6 +251,16 @@ class Twinner():
         # Get the best result
         best = min(results, key=lambda r: r.fun)
 
+        # Refine the best start with a deterministic tight-tolerance polish. The
+        # multi-start Powell runs at scipy's default tolerance, which halts early
+        # on the sloppy (ill-conditioned) physiological likelihood ridge; a
+        # tight-tolerance restart loop from the best point walks the rest of the
+        # way down to the true optimum. Runs in-process (no RNG) so twinning stays
+        # reproducible.
+        if self.polish and np.isfinite(best.fun):
+            best = self._polish(best, model, rbg_data, unknown_parameters_prior,
+                                correlation_structure)
+
         # Print a convergence summary across all starts
         if self.verbose:
             funs = np.array([r.fun for r in results], dtype=float)
@@ -288,6 +307,83 @@ class Twinner():
         ret['fun'] = best.fun
         ret['x'] = clipped_x
         return ret
+
+    def _polish(self, best, model, rbg_data, unknown_parameters_prior,
+                correlation_structure=None, max_rounds: int = 5, tol: float = 1e-8,
+                rel_improve: float = 1e-7, evals_per_dim: int = 1000,
+                max_budget: int = 8000):
+        """Refines the best multi-start result with a tight-tolerance Powell loop.
+
+        Powell resets its search-direction set on each fresh call, so restarting
+        it from the incumbent with tight tolerances lets it keep descending a
+        narrow, ill-conditioned valley that a single default-tolerance run stops
+        short of. The loop repeats until a round fails to improve the objective by
+        a meaningful *relative* amount, so it stops promptly once the optimum is
+        reached. The starting point is fixed and no randomness is involved, so the
+        result is deterministic.
+
+        Cost is bounded on purpose: each restart's function-evaluation budget is
+        ``min(evals_per_dim * n_params, max_budget)`` and the number of restarts is
+        capped, with an early stop once a round stops improving. The absolute
+        ``max_budget`` cap keeps a single restart affordable on high-dimensional
+        models (e.g. the 25-parameter extended model, where an uncapped tight
+        Powell runs for many minutes), while the ``max_rounds`` restarts let the
+        cheaper low-dimensional models still converge fully. The bounds depend only
+        on fixed problem sizes, so the result stays deterministic.
+
+        Parameters
+        ----------
+        best : scipy.optimize.OptimizeResult
+            The best multi-start result; its ``x``/``fun`` seed the refinement.
+        model : object
+            The model instance being fit (mutated in place by each evaluation).
+        rbg_data : object
+            The data object used to compute the likelihood.
+        unknown_parameters_prior : dict
+            The priors/bounds spec (fixes parameter order and integer handling).
+        correlation_structure : dict or None, optional, default : None
+            The precomputed Gaussian-copula structure, or ``None``.
+        max_rounds : int, optional, default : 5
+            Maximum number of tight-tolerance Powell restarts (the early stop
+            often triggers before this).
+        tol : float, optional, default : 1e-8
+            The ``xtol``/``ftol`` passed to each Powell restart. Far tighter than
+            scipy's 1e-4 default (which caused the under-convergence).
+        rel_improve : float, optional, default : 1e-7
+            Minimum relative objective improvement ``(fun - r.fun)/max(1, |fun|)``
+            a round must yield to keep going; below it the loop stops.
+        evals_per_dim : int, optional, default : 1000
+            Per-restart function-evaluation budget per parameter (before the cap).
+        max_budget : int, optional, default : 8000
+            Absolute cap on a single restart's function-evaluation budget; bounds
+            the per-restart cost on high-dimensional models.
+
+        Returns
+        -------
+        scipy.optimize.OptimizeResult
+            ``best`` with ``x``/``fun`` updated to the refined optimum (unchanged
+            when no restart improves on the incumbent).
+        """
+        x = np.asarray(best.x, dtype=float)
+        fun = best.fun
+        budget = min(evals_per_dim * len(x), max_budget)
+        for _ in range(max_rounds):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = minimize(self._neg_log_posterior, x, method='Powell',
+                             args=(model, rbg_data, unknown_parameters_prior,
+                                   correlation_structure),
+                             options={'maxiter': budget, 'maxfev': budget,
+                                      'xtol': tol, 'ftol': tol, 'disp': False})
+            if not np.isfinite(r.fun) or r.fun >= fun:
+                break
+            gain = (fun - r.fun) / max(1.0, abs(fun))
+            x, fun = r.x, r.fun
+            if gain < rel_improve:
+                break
+        best.x = x
+        best.fun = fun
+        return best
 
     def _log_prior(self, model, unknown_parameters_prior, correlation_structure=None):
         """Computes the log prior probability of the model parameters.

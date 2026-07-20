@@ -1,5 +1,12 @@
 # ReplayBG
 
+> [!WARNING]
+> **This is ReplayBG 2.0 — a beta pre-release.** It is a ground-up refactor of
+> [`py_replay_bg`](https://github.com/gcappon/py_replay_bg) and may still contain bugs.
+> A plain `pip install py-replay-bg` keeps installing the stable **1.x** line; opt into the
+> 2.0 beta explicitly with `--pre` (see [Installation](#installation)). Please
+> [report issues](https://github.com/DIANA-UNIPD/replaybg/issues).
+
 **ReplayBG** is a digital-twin framework for Type 1 Diabetes (T1D) glucose dynamics. It fits a
 physiological ODE model to a person's CGM + insulin + meal data (**twinning**), then uses the
 fitted model to simulate counterfactual "what-if" scenarios (**replay**) — *what would this
@@ -20,18 +27,39 @@ algorithm in the loop?*
 
 ## Installation
 
-ReplayBG is not published on PyPI; run it from a clone. It requires **Python ≥ 3.12** and uses
-[`uv`](https://docs.astral.sh/uv/) for dependency management.
+ReplayBG requires **Python ≥ 3.12** and is published on PyPI as `py-replay-bg`.
+
+**Stable (1.x — recommended for now):**
 
 ```bash
-git clone <this-repo-url>
-cd replaybg
-uv sync
+pip install py-replay-bg
 ```
 
-Modules live at the repository root and are imported directly (`from replaybg import ReplayBG`,
-`from model.multi_meal_t1d import MultiMealT1DModel`, …), so run scripts and tests from the repo
-root.
+**2.0 beta (this refactor — opt in explicitly):**
+
+```bash
+pip install --pre py-replay-bg
+# or pin an exact pre-release:
+pip install "py-replay-bg==2.0.0b1"
+```
+
+`pip` skips pre-releases by default, so plain installs stay on the stable 1.x line until
+`2.0.0` final ships. Once 2.0 is final it becomes the default; pin `py-replay-bg<2` to stay
+on 1.x after that.
+
+The public API is imported as `py_replay_bg` (e.g. `from py_replay_bg import ReplayBG`,
+`from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel`).
+
+### From source (development)
+
+This 2.x line uses [`uv`](https://docs.astral.sh/uv/) for dependency management:
+
+```bash
+git clone https://github.com/DIANA-UNIPD/replaybg
+cd replaybg
+uv sync                 # installs the package (editable) + dev tools
+uv sync --group docs    # add the docs toolchain when building the site
+```
 
 ## Get started
 
@@ -59,11 +87,11 @@ columns:
 
 ```python
 import pandas as pd
-from replaybg import ReplayBG
-from data.multi_meal_t1d_data import MultiMealT1DData
-from model.multi_meal_t1d import MultiMealT1DModel
-from distributions import Normal, Gamma, LogNormal, Uniform
-from utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg import ReplayBG
+from py_replay_bg.data.multi_meal_t1d_data import MultiMealT1DData
+from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel
+from py_replay_bg.distributions import Normal, Gamma, LogNormal, Uniform
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
 
 df = pd.read_parquet("example/data_day_1_2.parquet")
 df['t'] = pd.to_datetime(df['t'])          # the 't' column MUST be datetime
@@ -145,7 +173,7 @@ Each `replay()` returns a dict with the predicted `output` (interstitial glucose
 (with 30% less insulin, expect higher glucose / more time above range):
 
 ```python
-from utils.agata_analysis import analyze_replay
+from py_replay_bg.utils.agata_analysis import analyze_replay
 analyze_replay(baseline, ts=5)
 analyze_replay(whatif, ts=5)
 ```

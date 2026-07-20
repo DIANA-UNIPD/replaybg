@@ -5,14 +5,14 @@ the per-step state from `ReplayContext`. See the [Replay guide](../replay.md).
 
 ## ReplayCallback
 
-::: callbacks.callback.ReplayCallback
+::: py_replay_bg.callbacks.callback.ReplayCallback
 
 ## ReplayContext
 
-::: callbacks.context.ReplayContext
+::: py_replay_bg.callbacks.context.ReplayContext
 
 ## Built-in callbacks
 
-::: callbacks.default_callbacks.CorrectionBolus
+::: py_replay_bg.callbacks.default_callbacks.CorrectionBolus
 
-::: callbacks.default_callbacks.HypoTreatment
+::: py_replay_bg.callbacks.default_callbacks.HypoTreatment

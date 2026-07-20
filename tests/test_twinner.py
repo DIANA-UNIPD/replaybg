@@ -25,11 +25,11 @@ import pandas as pd
 import pytest
 from scipy.special import ndtri
 
-from distributions import Gamma, LogNormal, Normal, Uniform
-from data.single_meal_t1d_data import SingleMealT1DData
-from model.single_meal_t1d import SingleMealT1DModel
-from utils.numba_dicts import to_typed_f64_dict
-from twinner.twinner import Twinner, _build_correlation_structure
+from py_replay_bg.distributions import Gamma, LogNormal, Normal, Uniform
+from py_replay_bg.data.single_meal_t1d_data import SingleMealT1DData
+from py_replay_bg.model.single_meal_t1d import SingleMealT1DModel
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.twinner.twinner import Twinner, _build_correlation_structure
 
 
 EXAMPLE_DIR = Path(__file__).resolve().parents[1] / "example"

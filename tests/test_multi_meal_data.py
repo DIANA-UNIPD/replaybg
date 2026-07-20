@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from dataclass_contract import assert_meal_routing, assert_shared_contract
-from data.multi_meal_t1d_data import MultiMealT1DData
+from py_replay_bg.data.multi_meal_t1d_data import MultiMealT1DData
 
 BODY_WEIGHT = 100.0
 CHANNELS = {

@@ -2,4 +2,4 @@
 
 The top-level entry point of the framework: `ReplayBG.twin()` and `ReplayBG.replay()`.
 
-::: replaybg.ReplayBG
+::: py_replay_bg.replaybg.ReplayBG

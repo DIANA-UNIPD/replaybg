@@ -54,7 +54,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [.]
+          paths: [src]
           options:
             members_order: source
             show_if_no_docstring: true

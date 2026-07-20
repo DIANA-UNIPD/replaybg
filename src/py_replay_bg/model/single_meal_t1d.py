@@ -3,7 +3,7 @@ from numba import float64, int16
 from numba.typed import Dict
 from numba import types
 
-from environment import jitclass_
+from py_replay_bg.environment import jitclass_
 
 theta0_type = types.DictType(types.unicode_type, float64)
 theta_prev_type = types.DictType(types.unicode_type, float64)

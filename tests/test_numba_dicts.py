@@ -4,7 +4,7 @@ import pytest
 from numba import float64, types
 from numba.typed import Dict
 
-from utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
 
 
 def test_none_returns_empty_typed_dict():

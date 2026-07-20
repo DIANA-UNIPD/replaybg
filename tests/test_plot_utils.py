@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from utils.plot_common import (
+from py_replay_bg.utils.plot_common import (
     IMPULSE_MAX_DUTY,
     KIND_DENSE,
     attach_hover,
@@ -22,9 +22,9 @@ from utils.plot_common import (
     segment_offsets,
     series,
 )
-from utils.plot_replay import _resolve_action_field, plot_replay, plot_replay_intervals
-from utils.plot_twinning import plot_twinning_intervals
-from utils.plot_twinning_history import plot_twinning_history
+from py_replay_bg.utils.plot_replay import _resolve_action_field, plot_replay, plot_replay_intervals
+from py_replay_bg.utils.plot_twinning import plot_twinning_intervals
+from py_replay_bg.utils.plot_twinning_history import plot_twinning_history
 
 
 DATA_TO_INPUT = {0: "meal", 1: "bolus", 2: "basal", 3: "t_hour"}

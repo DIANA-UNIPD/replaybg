@@ -10,12 +10,12 @@ from multiprocessing import freeze_support
 import os
 import matplotlib.pyplot as plt
 
-from model.multi_meal_extended_t1d import MultiMealExtendedT1DModel
-from replaybg import ReplayBG
-from utils.agata_analysis import analyze_replay
-from utils.load_results import load_results
-from utils.numba_dicts import to_typed_f64_dict
-from utils.plot_replay import plot_replay
+from py_replay_bg.model.multi_meal_extended_t1d import MultiMealExtendedT1DModel
+from py_replay_bg import ReplayBG
+from py_replay_bg.utils.agata_analysis import analyze_replay
+from py_replay_bg.utils.load_results import load_results
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.utils.plot_replay import plot_replay
 
 
 if __name__ == '__main__':

@@ -5,16 +5,16 @@ Prior distributions used in the `unknown_parameters_prior` dict. Each exposes
 
 ## Normal
 
-::: distributions.Normal
+::: py_replay_bg.distributions.Normal
 
 ## LogNormal
 
-::: distributions.LogNormal
+::: py_replay_bg.distributions.LogNormal
 
 ## Gamma
 
-::: distributions.Gamma
+::: py_replay_bg.distributions.Gamma
 
 ## Uniform
 
-::: distributions.Uniform
+::: py_replay_bg.distributions.Uniform

@@ -11,15 +11,15 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from model.multi_meal_t1d import MultiMealT1DModel
-from replaybg import ReplayBG
-from callbacks import CorrectionBolus, HypoTreatment
-from sensors import Vettoretti19CGM
-from utils.agata_analysis import analyze_replay
-from utils.load_results import load_results
-from utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.model.multi_meal_t1d import MultiMealT1DModel
+from py_replay_bg import ReplayBG
+from py_replay_bg.callbacks import CorrectionBolus, HypoTreatment
+from py_replay_bg.sensors import Vettoretti19CGM
+from py_replay_bg.utils.agata_analysis import analyze_replay
+from py_replay_bg.utils.load_results import load_results
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
 
-from utils.plot_replay import plot_replay
+from py_replay_bg.utils.plot_replay import plot_replay
 
 
 if __name__ == '__main__':

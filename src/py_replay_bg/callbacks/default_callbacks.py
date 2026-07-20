@@ -1,4 +1,4 @@
-from callbacks.callback import ReplayCallback
+from py_replay_bg.callbacks.callback import ReplayCallback
 
 
 class CorrectionBolus(ReplayCallback):

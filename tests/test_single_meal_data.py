@@ -8,7 +8,7 @@ using the in-memory ``single_meal_df`` fixture.
 import numpy as np
 import pytest
 
-from data.single_meal_t1d_data import SingleMealT1DData
+from py_replay_bg.data.single_meal_t1d_data import SingleMealT1DData
 
 YTS = 5  # integration steps per data sample (hard-coded in the class)
 BODY_WEIGHT = 100.0

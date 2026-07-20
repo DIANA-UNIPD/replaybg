@@ -1,6 +1,6 @@
 import numpy as np
 
-from sensors.sensor import Sensor
+from py_replay_bg.sensors.sensor import Sensor
 
 
 class Vettoretti19CGM(Sensor):

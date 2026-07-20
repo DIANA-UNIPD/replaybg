@@ -5,12 +5,12 @@ The data-preparation classes that turn a raw `DataFrame` into the model-ready
 
 ## SingleMealT1DData
 
-::: data.single_meal_t1d_data.SingleMealT1DData
+::: py_replay_bg.data.single_meal_t1d_data.SingleMealT1DData
 
 ## MultiMealT1DData
 
-::: data.multi_meal_t1d_data.MultiMealT1DData
+::: py_replay_bg.data.multi_meal_t1d_data.MultiMealT1DData
 
 ## MultiMealExtendedT1DData
 
-::: data.multi_meal_extended_t1d_data.MultiMealExtendedT1DData
+::: py_replay_bg.data.multi_meal_extended_t1d_data.MultiMealExtendedT1DData

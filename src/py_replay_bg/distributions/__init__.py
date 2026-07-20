@@ -3,7 +3,7 @@ import math
 import numpy as np
 from numba import float64
 
-from environment import jitclass_, njit_
+from py_replay_bg.environment import jitclass_, njit_
 
 _SQRT2 = math.sqrt(2.0)
 

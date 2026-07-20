@@ -3,17 +3,18 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from environment import Environment
+from py_replay_bg.environment import Environment
 
 
-class MultiMealT1DData:
+class MultiMealExtendedT1DData:
     """Prepare and store time-series data for the ReplayBG simulation pipeline.
 
     The class converts a pandas dataframe into the arrays and metadata needed by
     the model and twinning procedure. It extracts time, glucose, insulin, and
     meal information, and organizes them into regularly sampled vectors that can
-    be consumed by the simulator. This variant handles multiple labelled daily
-    meals (breakfast, lunch, dinner, snack, hypo-treatment).
+    be consumed by the simulator. This extended variant adds second-occurrence
+    meal channels (``B2``, ``L2``, ``S2``) to support simulations spanning more
+    than one day.
 
     ...
     Attributes
@@ -97,11 +98,14 @@ class MultiMealT1DData:
                                   2: 'meal_D',
                                   3: 'meal_S',
                                   4: 'meal_H',
-                                  5: 'bolus',
-                                  6: 'basal',
-                                  7: 't_hour',
-                                  8: 'forcing_ip',
-                                  9: 'forcing_ra'}
+                                  5: 'meal_B2',
+                                  6: 'meal_L2',
+                                  7: 'meal_S2',
+                                  8: 'bolus',
+                                  9: 'basal',
+                                  10: 't_hour',
+                                  11: 'forcing_ip',
+                                  12: 'forcing_ra'}
         else:
             self.data_to_input = data_to_input
 
@@ -232,6 +236,10 @@ class MultiMealT1DData:
         self.meal_S = np.zeros([self.tsteps, ])
         self.meal_H = np.zeros([self.tsteps, ])
 
+        self.meal_B2 = np.zeros([self.tsteps, ])
+        self.meal_L2 = np.zeros([self.tsteps, ])
+        self.meal_S2 = np.zeros([self.tsteps, ])
+
         self.meal_data = data.cho.values
 
         # Find the meals
@@ -260,6 +268,17 @@ class MultiMealT1DData:
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
             if data['cho_label'][m_idx[i]] == 'H':
                 self.meal_H[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+
+            if data['cho_label'][m_idx[i]] == 'B2':
+                self.meal_B2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'L2':
+                self.meal_L2[(m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)] = self.meal[
+                    (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
+            if data['cho_label'][m_idx[i]] == 'S2':
+                self.meal_S2[(m_idx[i] * self.yts):(
+                        (m_idx[i] + 1) * self.yts)] = self.meal[
                     (m_idx[i] * self.yts):((m_idx[i] + 1) * self.yts)]
 
     def __setup_u(self):

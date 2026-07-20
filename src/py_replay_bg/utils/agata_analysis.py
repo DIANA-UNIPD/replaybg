@@ -28,8 +28,8 @@ from py_agata.py_agata import Agata
 from py_agata.error import rmse, mard, cod, clarke, g_rmse
 from py_agata.utils import glucose_vector_to_dataframe
 
-from utils.numba_dicts import to_typed_f64_dict
-from utils.save_results import save_results
+from py_replay_bg.utils.numba_dicts import to_typed_f64_dict
+from py_replay_bg.utils.save_results import save_results
 
 
 def analyze_replay(

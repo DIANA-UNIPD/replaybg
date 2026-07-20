@@ -1,8 +1,34 @@
 [project]
-name = "replaybg"
-version = "0.1.0"
-description = "Add your description here"
+name = "py-replay-bg"
+version = "2.0.0b1"
+description = "ReplayBG: a digital twin-based methodology to assess new strategies for type 1 diabetes management (2.x line)."
+readme = "README.md"
 requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+license-files = ["COPYING.md"]
+authors = [
+    { name = "Giacomo Cappon", email = "cappongiacomo@gmail.com" },
+]
+keywords = [
+    "diabetes",
+    "type 1 diabetes",
+    "digital twin",
+    "glucose",
+    "CGM",
+    "simulation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+# Direct runtime dependencies only. matplotlib stays a core dependency because the
+# shipped plotting utilities (py_replay_bg.utils.plot_*) are a first-class feature,
+# matching the 1.x package. Docs tooling lives in the `docs` dependency-group below.
 dependencies = [
     "numba",
     "numpy",
@@ -10,23 +36,53 @@ dependencies = [
     "scipy",
     "pyarrow",
     "matplotlib>=3.10.8",
-    "mkdocs",
-    "mkdocs-material",
-    "mkdocstrings[python]",
     "tqdm",
     "py_agata",
+]
+
+[project.urls]
+Homepage = "https://github.com/DIANA-UNIPD/replaybg"
+Documentation = "https://DIANA-UNIPD.github.io/replaybg/"
+Repository = "https://github.com/DIANA-UNIPD/replaybg"
+"Bug Tracker" = "https://github.com/DIANA-UNIPD/replaybg/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/py_replay_bg"]
+
+[tool.hatch.build.targets.sdist]
+# Keep the sdist lean: ship the package, tests and examples plus project metadata.
+# Exclude docs image assets, the built `site/`, and the `identifiability/` research
+# scratch, which would otherwise bloat the archive to several MB.
+include = [
+    "src/py_replay_bg",
+    "tests",
+    "example",
+    "README.md",
+    "CHANGELOG.md",
+    "COPYING.md",
+    "pyproject.toml",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8",
 ]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-# Modules live at the repo root (imported as `from distributions import ...`,
-# `from environment import ...`), so put the root on sys.path for the tests.
-pythonpath = ["."]
+# src layout: the package is installed (editable) into the venv, so tests import
+# `from py_replay_bg... import ...` against the installed package. Test-local
+# helpers (conftest.py, dataclass_contract.py) resolve via pytest's prepend
+# import mode, since tests/ has no __init__.py.
 testpaths = ["tests"]
 addopts = "-ra"
 markers = [

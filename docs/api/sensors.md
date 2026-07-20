@@ -5,8 +5,8 @@ The output-agnostic sensor interface and the default CGM error model. See the
 
 ## Sensor
 
-::: sensors.sensor.Sensor
+::: py_replay_bg.sensors.sensor.Sensor
 
 ## Vettoretti19CGM
 
-::: sensors.vettoretti19_cgm.Vettoretti19CGM
+::: py_replay_bg.sensors.vettoretti19_cgm.Vettoretti19CGM
