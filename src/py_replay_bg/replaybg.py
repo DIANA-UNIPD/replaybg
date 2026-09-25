@@ -212,10 +212,20 @@ class ReplayBG:
             ``measurement_time`` (integration-step index of each sample).
         """
         # TODO: validate the inputs
+        # Re-seed the model from the recorded data before replaying: reset() with
+        # the model's own theta0 (unchanged) plus the first measured glucose and
+        # the true t=0 input row, so the replay starts at the observed glucose
+        # (matches the twinning start and the 1.x methodology) instead of the
+        # model's construction-time placeholder. See Model.reset() for exactly
+        # when g0/u0 take effect (skipped on carry-over segments or an explicit x0).
+        if hasattr(model, "reset") and hasattr(model, "theta0") and len(rbg_data.y_idxs) > 0:
+            g0 = float(rbg_data.y[rbg_data.y_idxs[0]])
+            model.reset(model.theta0, g0, rbg_data.u[0])
 
         n_ch = rbg_data.u.shape[1]
         out = np.zeros(rbg_data.tsteps, )
         replayed_u = np.zeros((rbg_data.tsteps, n_ch))
+
         out[0] = model.output(0)
         replayed_u[0] = rbg_data.u[0]
 

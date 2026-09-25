@@ -212,6 +212,12 @@ class MultiMealExtendedT1DModel:
                  ):
         """Constructs the model and allocates the state arrays.
 
+        Construction never has real data to seed the cold start from — that
+        only becomes available once the model is handed to ``replay()``,
+        ``twin()`` or similar, which re-seed it via ``reset()``'s ``g0``/``u0``
+        (see ``reset``). So this always starts from the steady state (or
+        ``x0``), never from ``g0``/``u0``.
+
         Parameters
         ----------
         u2ss : float
@@ -254,7 +260,9 @@ class MultiMealExtendedT1DModel:
         self.reset(theta0)
 
     def reset(self,
-              theta0=Dict.empty(key_type=types.unicode_type, value_type=float64)
+              theta0=Dict.empty(key_type=types.unicode_type, value_type=float64),
+              g0=np.nan,
+              u0=np.empty(0, dtype=np.float64),
               ):
         """Resets all model parameters and re-initialises the state arrays.
 
@@ -266,16 +274,37 @@ class MultiMealExtendedT1DModel:
         theta0 : numba.typed.Dict, optional
             The model parameters to set. Missing entries fall back to default
             values.
+        g0 : float, optional, default : numpy.nan
+            The first observed glucose value for the segment being simulated.
+            Pass it whenever real data backs this reset, for example every
+            candidate-parameter reset in a twinning optimisation loop, or a
+            one-off reset before replaying/plotting against recorded data.
+            When given, it seeds both ``G[0]`` and ``IG[0]`` — but only on a
+            genuine cold start: it is ignored when ``theta_prev`` is non-empty
+            (carry-over segment) or when ``x0`` already supplies an explicit
+            ``G0``/``IG0``, since both already define their own initial
+            condition. Leave at the default ``numpy.nan`` when no such value
+            is available (e.g. constructing the model before any data is
+            attached) or to defer entirely to ``x0``/``theta_prev``.
+        u0 : numpy.ndarray, optional, default : empty array
+            The full t=0 input row (length ``n_u``). ``reset`` always
+            reallocates the input history buffer, wiping any previous t=0
+            seed, so pass this on *every* call that is about to simulate over
+            real data — not just the first. Without it, delayed lookups at
+            t=0 see zeros instead of the true recorded input. Leave at the
+            default empty array only when no input row is available yet; the
+            basal channel then falls back to ``u2ss`` and the bolus channel
+            to zero.
         """
 
         # Reset parameters first
         self._reset_theta(theta0)
 
         # Reset state initial conditions
-        self._reset_x0()
+        self._reset_x0(g0)
 
         # Reset inputs
-        self._reset_u()
+        self._reset_u(u0)
 
 
     def _reset_theta(self,
@@ -339,22 +368,30 @@ class MultiMealExtendedT1DModel:
         self.beta_L2 = np.int16(theta0["beta_L2"]) if "beta_L2" in theta0 else np.int16(0)
         self.beta_S2 = np.int16(theta0["beta_S2"]) if "beta_S2" in theta0 else np.int16(0)
 
-    def _reset_x0(self):
+    def _reset_x0(self, g0=np.nan):
         """Initialises the state arrays from ``x0``, falling back to the steady state.
 
         Carry-over insulin and insulin-action initial conditions are rescaled by
         the ratio between the current and previous segment parameters when
         ``theta_prev`` is provided.
+
+        Parameters
+        ----------
+        g0 : float, optional, default : numpy.nan
+            First observed glucose value to seed ``G0``/``IG0`` with on a cold
+            start. See ``reset`` for the full precedence rules.
         """
 
         # --- Initial conditions (fall back to steady state if not provided) ---
 
-        # Glucose compartments
-        self._G0 = self.x0["G0"] if "G0" in self.x0 else np.float64(self.Gb)
+        # Glucose compartments: an explicit x0["G0"] wins, then the data-seeded
+        # g0 on a genuine cold start, then the basal steady state.
+        have_g0 = (not np.isnan(g0)) and len(self.theta_prev) == 0
+        self._G0 = self.x0["G0"] if "G0" in self.x0 else (np.float64(g0) if have_g0 else np.float64(self.Gb))
         self.G = np.empty((self.tsteps,), dtype=np.float64)
         self.G[0] = self._G0
 
-        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else np.float64(self.Gb)
+        self._IG0 = self.x0["IG0"] if "IG0" in self.x0 else (np.float64(g0) if have_g0 else np.float64(self.Gb))
         self.IG = np.empty((self.tsteps,), dtype=np.float64)
         self.IG[0] = self._IG0
 
@@ -494,12 +531,23 @@ class MultiMealExtendedT1DModel:
         self.Ip = np.empty((self.tsteps,), dtype=np.float64)
         self.Ip[0] = self._Ip0
 
-    def _reset_u(self):
-        """Allocates the input history buffer and seeds the basal channel."""
+    def _reset_u(self, u0=np.empty(0, dtype=np.float64)):
+        """Allocates the input history buffer and seeds the t=0 input row.
+
+        Parameters
+        ----------
+        u0 : numpy.ndarray, optional, default : empty array
+            The real t=0 input row (length ``n_u``). See ``reset``. When absent
+            (wrong length), the basal channel falls back to ``u2ss`` and the
+            bolus channel to zero.
+        """
         # Input buffer used by step() to retrieve delayed input values
         self.u = np.zeros((self.n_u, self.tsteps), dtype=np.float64)
-        self.u[8, 0] = self.u2ss  # slot 8 = bolus in data convention, but set to u2ss
-        self.u[9, 0] = 0.0  # slot 9 = basal in data convention, but set to 0
+        if u0.shape[0] == self.n_u:
+            self.u[:, 0] = u0
+        else:
+            self.u[8, 0] = self.u2ss  # slot 8 = bolus in data convention, but set to u2ss
+            self.u[9, 0] = 0.0  # slot 9 = basal in data convention, but set to 0
         if len(self.theta_prev) == 0:
             self.previous_ra = np.zeros(self.tsteps)
 
