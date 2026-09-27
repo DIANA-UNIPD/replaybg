@@ -1,6 +1,6 @@
 [project]
 name = "py-replay-bg"
-version = "2.0.0b1"
+version = "2.0.0b2"
 description = "ReplayBG: a digital twin-based methodology to assess new strategies for type 1 diabetes management (2.x line)."
 readme = "README.md"
 requires-python = ">=3.12"

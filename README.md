@@ -40,7 +40,7 @@ pip install py-replay-bg
 ```bash
 pip install --pre py-replay-bg
 # or pin an exact pre-release:
-pip install "py-replay-bg==2.0.0b1"
+pip install "py-replay-bg==2.0.0b2"
 ```
 
 `pip` skips pre-releases by default, so plain installs stay on the stable 1.x line until

@@ -4,7 +4,21 @@ All notable changes to `py-replay-bg` are documented here. This project follows
 [PEP 440](https://peps.python.org/pep-0440/) versioning; pre-releases (e.g. `2.0.0b1`) are
 **not** installed by a plain `pip install` — pass `--pre` to opt in.
 
-## 2.0.0b1 — unreleased (beta)
+## 2.0.0b2 — unreleased (beta)
+
+- **Model seeding fix**: the model now seeds the first CGM value and insulin
+  from the actual starting data instead of basal values (previously the
+  simulation's starting point was at basal values regardless of the real
+  initial state). `model.reset()`'s signature changed across
+  `SingleMealT1DModel`, `MultiMealT1DModel`, and `MultiMealExtendedT1DModel`
+  to support this.
+- Improved `log_prior` computation.
+- Added `tests/test_model_seeding.py` and expanded coverage in `test_replay.py`,
+  `test_twinner.py`, and the per-model test files; regenerated the `GOLDEN_X`
+  fixtures used by the `slow` end-to-end tests.
+- Minor example-script updates.
+
+## 2.0.0b1 — 2026-07-20
 
 First pre-release of the **2.x line**, a ground-up refactor of
 [`py_replay_bg`](https://github.com/gcappon/py_replay_bg) 1.x. Published under the same PyPI

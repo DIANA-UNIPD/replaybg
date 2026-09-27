@@ -1036,7 +1036,7 @@ wheels = [
 
 [[package]]
 name = "py-replay-bg"
-version = "2.0.0b1"
+version = "2.0.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "matplotlib" },
