@@ -72,7 +72,7 @@ if __name__ == '__main__':
         'f': {'prior': Normal(mu=0.8, sigma=0.05), 'min': 0, 'max': 1},
         'p2': {'prior': Normal(mu=0.11, sigma=0.05), 'min': 0, 'max': .5},
         'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
-        'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
+        #'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
         'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
         'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
         'SI_L': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
@@ -88,7 +88,12 @@ if __name__ == '__main__':
     }
 
     # Correlations are disabled for this example (parameters treated as independent).
-    correlations = None
+    correlations = {('SI_B', 'SI_D'): .53,
+                    ('SI_B', 'SI_L'): .46,
+                    ('SI_L', 'SI_D'): .46,
+                    ('Gb', 'SI_B'): -.35,
+                    ('Gb', 'SI_L'): -.30,
+                    ('Gb', 'SI_D'): -.44}
 
     # Twin each day in turn, carrying the previous day's final state forward.
     segments = []

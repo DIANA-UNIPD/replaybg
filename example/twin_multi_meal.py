@@ -23,10 +23,10 @@ from py_replay_bg.utils.agata_analysis import analyze_twin
 
 if __name__ == '__main__':
     freeze_support()
-    df = pd.read_parquet("data_day_1_2.parquet")
+    df = pd.read_parquet("data_day_1.parquet")
     df['t'] = pd.to_datetime(df['t'])
     save_folder = os.path.join(os.path.abspath(''), 'results')
-    save_name = 'multi_meal_day_1_2'
+    save_name = 'multi_meal_day_1'
 
     # Impute breakfast (clearly missing)
     df.loc[10, 'cho'] = 10
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         'f': {'prior': Normal(mu=0.8, sigma=0.05), 'min': 0, 'max': 1},
         'p2': {'prior': Normal(mu=0.11, sigma=0.05), 'min': 0, 'max': .5},
         'ka2': {'prior': LogNormal(mu=-4.2875, sigma=0.4274), 'min': 0, 'max': .5},
-        'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
+        #'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
         'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
         'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
         'SI_L': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
@@ -64,10 +64,12 @@ if __name__ == '__main__':
         'beta_S': {'prior': Uniform(a=0, b=60), 'min': 0, 'max': 60, 'integer': True},
     }
 
-    correlations = {('SI_B', 'p2') : -.5,
-                    ('SI_L', 'p2'): -.5,
-                    ('SI_D', 'p2'): -.5,
-                    }
+    correlations = {('SI_B', 'SI_D'): .53,
+                    ('SI_B', 'SI_L'): .46,
+                    ('SI_L', 'SI_D'): .46,
+                    ('Gb', 'SI_B'): -.35,
+                    ('Gb', 'SI_L'): -.30,
+                    ('Gb', 'SI_D'): -.44}
 
     # Run twinning. The results (theta, history, rbg_data) are pickled to
     # results/twin_<save_name>.pkl so replay_multi_meal.py can load them.

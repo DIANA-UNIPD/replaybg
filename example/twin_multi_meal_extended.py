@@ -50,7 +50,7 @@ if __name__ == '__main__':
         'Gb': {'prior': Normal(mu=119.13, sigma=7.11), 'min': 70, 'max': 150},
         'SG': {'prior': LogNormal(mu=-3.8, sigma=0.05), 'min': 0, 'max': .5},
         'p2': {'prior': Normal(mu=0.11, sigma=0.05), 'min': 0, 'max': .5},
-        'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
+        #'kd': {'prior': LogNormal(mu=-3.5090, sigma=0.6187), 'min': 0, 'max': .5},
         'kempt': {'prior': LogNormal(mu=-1.9646, sigma=0.7069), 'min': 0, 'max': .75},
         'SI_B': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},
         'SI_L': {'prior': Gamma(alpha=3.3, beta=1 / 5e-4), 'min': 0, 'max': .1},

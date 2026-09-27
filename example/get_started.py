@@ -58,7 +58,7 @@ if __name__ == '__main__':
     #   cho_label    meal type: 'B','L','D','S','H'
     #                (breakfast/lunch/dinner/snack/hypo-treatment)
     here = os.path.dirname(os.path.abspath(__file__))
-    df = pd.read_parquet(os.path.join(here, "data_day_1_2.parquet"))
+    df = pd.read_parquet(os.path.join(here, "data_day_1.parquet"))
     df['t'] = pd.to_datetime(df['t'])   # the 't' column MUST be datetime
 
     # This synthetic trace is missing its first breakfast; add it back so the
@@ -112,9 +112,12 @@ if __name__ == '__main__':
     # Correlations between parameters can be encoded as a Gaussian-copula prior.
     # Here insulin sensitivity is negatively correlated with the insulin-action
     # rate p2.
-    correlations = {('SI_B', 'p2'): -.5,
-                    ('SI_L', 'p2'): -.5,
-                    ('SI_D', 'p2'): -.5}
+    correlations = {('SI_B', 'SI_D'): .53,
+                    ('SI_B', 'SI_L'): .46,
+                    ('SI_L', 'SI_D'): .46,
+                    ('Gb', 'SI_B'): -.35,
+                    ('Gb', 'SI_L'): -.30,
+                    ('Gb', 'SI_D'): -.44}
 
     # Twinning runs a multi-start optimisation. n_starts is kept small here so the
     # example finishes in a couple of minutes — bump it up (e.g. 64) for real fits.
