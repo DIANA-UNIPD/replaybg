@@ -133,8 +133,8 @@ def analyze_twin(
         CGM (``y``), the input matrix (``u``), ``tsteps`` and the data sampling
         stride ``yts``.
     model : object
-        A model instance implementing ``reset(theta_dict)``, ``step(u, t)`` and
-        ``output(t)``.
+        A model instance implementing ``reset(theta_dict, g0, u0)``,
+        ``step(u, t)`` and ``output(t)``.
     integration_ts : int, optional, default : 1
         Minutes represented by one integration step (``environment.ts``). The
         AGATA cadence is ``rbg_data.yts * integration_ts``.
@@ -158,8 +158,12 @@ def analyze_twin(
     theta = twin_results["theta"]
 
     # Simulate the fitted model forward (same reset/step/output pass the twinner
-    # uses for the likelihood; mirrors utils.plot_twinning).
-    model.reset(to_typed_f64_dict(theta))
+    # uses for the likelihood; mirrors utils.plot_twinning). Re-seed the
+    # cold-start glucose and the t=0 input row from data, same as the twinner
+    # and plot_twinning, so this reproduces the exact trace that was fitted
+    # (see Model.reset() for exactly when g0/u0 take effect).
+    g0 = float(rbg_data.y[rbg_data.y_idxs[0]]) if len(rbg_data.y_idxs) > 0 else np.nan
+    model.reset(to_typed_f64_dict(theta), g0, rbg_data.u[0])
     inputs = np.asarray(rbg_data.u)
     tsteps = int(rbg_data.tsteps)
     output = np.zeros(tsteps)

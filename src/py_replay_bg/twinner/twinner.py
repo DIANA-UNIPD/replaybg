@@ -399,7 +399,7 @@ class Twinner():
             A model instance containing the current parameter values.
         unknown_parameters_prior : dict
             A dictionary describing the priors for each parameter. Each prior
-            must provide an ``evaluate(value)`` method.
+            must provide a ``log_pdf(value)`` method.
         correlation_structure : dict or None, optional, default : None
             Precomputed Gaussian-copula structure (see
             :func:`_build_correlation_structure`). When ``None`` the parameters
@@ -418,14 +418,14 @@ class Twinner():
             a = v["min"]
             b = v["max"]
             # If the parameter is outside the valid range, return -inf
-            if parameter_value < a or parameter_value > b:
+            if parameter_value <= a or parameter_value >= b:
                 return -np.inf
             # Otherwise, add the marginal log prior contribution (corrected for the truncation)
-            density = v["prior"].evaluate(parameter_value)
+            log_density = v["prior"].log_pdf(parameter_value)
             z = v["prior"].cdf(b) - v["prior"].cdf(a)
-            if density <= 0 or z <= 0:
+            if log_density == -np.inf or z <= 0:
                 return -np.inf
-            lp += np.log(density) - np.log(z)
+            lp += log_density - np.log(z)
 
         # Add the Gaussian-copula correction for correlated parameters (if any)
         if correlation_structure is not None:
@@ -533,8 +533,11 @@ class Twinner():
 
         The parameter vector is used directly in the natural (constrained)
         parameter space: each entry is written into the model's typed parameter
-        dict (integer parameters are rounded) before ``model.reset``. Bounds are
-        enforced by the prior, which returns ``-inf`` outside ``[min, max]``.
+        dict (integer parameters are rounded) before ``model.reset``. Every reset
+        also re-seeds the cold-start glucose and the t=0 input row from
+        ``rbg_data`` (see ``Model.reset``), since ``reset`` clears them each call.
+        Bounds are enforced by the prior, which returns ``-inf`` outside
+        ``[min, max]``.
 
         Parameters
         ----------
@@ -560,12 +563,16 @@ class Twinner():
         for i, k in enumerate(unknown_parameters_prior.keys()):
             val = theta[i]
             #val = np.clip(theta[i], unknown_parameters_prior[k]['min'], unknown_parameters_prior[k]['max'])
-            if unknown_parameters_prior[k].get('integer', False):
+            is_int =  unknown_parameters_prior[k].get('integer', False)
+            if is_int:
                 val = int(round(val))
             theta_dict[k] = val
 
-        # Reset the model with the new parameters
-        model.reset(theta_dict)
+        # Reset the model with the new parameters, re-seeding the cold-start
+        # glucose and the t=0 input row from data every time (reset() clears
+        # both, so they can't just be seeded once outside this loop).
+        g0 = float(rbg_data.y[rbg_data.y_idxs[0]]) if len(rbg_data.y_idxs) > 0 else np.nan
+        model.reset(theta_dict, g0, rbg_data.u[0])
 
         # Calculate log-prior
         lp = self._log_prior(model, unknown_parameters_prior, correlation_structure)

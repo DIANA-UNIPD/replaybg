@@ -181,16 +181,25 @@ def test_log_likelihood_gaussian_cv_model(tw):
 # _log_posterior
 # --------------------------------------------------------------------------- #
 class _FakeModel(_ConstModel):
-    """Constant-output model that also records parameters set via ``reset``."""
+    """Constant-output model that also records parameters/seed set via ``reset``.
+
+    ``reset``'s ``g0``/``u0`` mirror the real models' contract (see
+    ``Model.reset``): optional, and recorded here so tests can check what
+    ``_log_posterior`` actually passed down on a given call.
+    """
 
     def __init__(self, g):
         super().__init__(g)
         self.SI = 0.0
         self.beta = 0.0
+        self.last_g0 = None
+        self.last_u0 = None
 
-    def reset(self, theta):
+    def reset(self, theta, g0=None, u0=None):
         for k in theta:
             setattr(self, k, float(theta[k]))
+        self.last_g0 = g0
+        self.last_u0 = u0
 
 
 @pytest.fixture
@@ -227,6 +236,24 @@ def test_log_posterior_is_sum_of_components(tw, posterior_rbg):
     lp, ll, post = tw._log_posterior(np.array([1e-3]), model, posterior_rbg, prior)
     assert np.isfinite(post)
     assert post == pytest.approx(lp + ll)
+
+
+def test_log_posterior_seeds_model_from_data(tw, posterior_rbg):
+    # Every reset() inside the optimisation loop must re-seed the cold-start
+    # glucose and the t=0 input row from rbg_data — not just once at twin()
+    # setup — since reset() clears both on every call (see Model.reset()).
+    prior = {"SI": {"prior": Gamma(3.3, 1 / 5e-4), "min": 0.0, "max": 0.1}}
+    model = _FakeModel(100.0)
+
+    tw._log_posterior(np.array([1e-3]), model, posterior_rbg, prior)
+    assert model.last_g0 == pytest.approx(posterior_rbg.y[posterior_rbg.y_idxs[0]])
+    np.testing.assert_array_equal(model.last_u0, posterior_rbg.u[0])
+
+    # A second candidate theta (a different optimiser iteration) must be
+    # re-seeded the same way, not skipped because it already happened once.
+    tw._log_posterior(np.array([2e-3]), model, posterior_rbg, prior)
+    assert model.last_g0 == pytest.approx(posterior_rbg.y[posterior_rbg.y_idxs[0]])
+    np.testing.assert_array_equal(model.last_u0, posterior_rbg.u[0])
 
 
 # --------------------------------------------------------------------------- #

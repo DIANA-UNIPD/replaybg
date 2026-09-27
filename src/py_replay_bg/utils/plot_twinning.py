@@ -30,21 +30,28 @@ def _simulate(model, rbg_data, theta: dict | None = None) -> np.ndarray:
     ----------
     model : object
         A model instance implementing the model interface contract
-        (``reset(theta_dict)``, ``step(u, t)``, ``output(t)``).
+        (``reset(theta_dict, g0, u0)``, ``step(u, t)``, ``output(t)``).
     rbg_data : object
         The prepared data whose ``u`` drives the simulation and whose ``tsteps``
         sets its length.
     theta : dict or None, optional, default : None
         The parameters to reset the model with before simulating. ``None`` leaves
-        the model in its current state.
+        the model's own ``theta0`` unchanged.
 
     Returns
     -------
     numpy.ndarray
         The model output at each integration step, shape ``(tsteps,)``.
     """
+    # Reset with the true starting point from data either way, so the plotted
+    # trace always starts at the observed glucose and the real t=0 input
+    # (see Model.reset() for exactly when g0/u0 take effect).
+    g0 = float(rbg_data.y[rbg_data.y_idxs[0]]) if len(rbg_data.y_idxs) > 0 else np.nan
+    u0 = rbg_data.u[0]
     if theta is not None:
-        model.reset(to_typed_f64_dict(theta))
+        model.reset(to_typed_f64_dict(theta), g0, u0)
+    elif hasattr(model, "reset") and hasattr(model, "theta0"):
+        model.reset(model.theta0, g0, u0)
 
     inputs = np.asarray(rbg_data.u)
     tsteps = int(rbg_data.tsteps)

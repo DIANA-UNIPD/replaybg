@@ -41,20 +41,21 @@ EXAMPLE_DIR = Path(__file__).resolve().parents[1] / "example"
 # Golden twinned parameters (order matches _prior(): Gb, SG, p2, f, ka2, kd,
 # kempt, SI, kabs, beta). One best-fit vector per n_starts setting. Captured
 # from a real run; see the module docstring for when/how to regenerate.
+#
+# Regenerated after switching Gamma's _gammaln from a Lanczos approximation to
+# math.lgamma and tightening _log_prior's truncation bounds.
 GOLDEN_X = {
     1: np.array([
-        118.54108897749562, 0.019282883234440454, 0.10975967000621162,
-        0.8623641267910293, 0.012116298233797338, 0.012500029840650557,
-        0.11895259960846845, 0.0006392117171368307, 0.01614734298527011,
-        0.0,
+        118.88049131108353, 0.024034466124964418, 0.11039972937476894,
+        0.8550149378817439, 0.010637045270326766, 0.011899857202001828,
+        0.029432172278645755, 0.000687689829607278, 0.49999999999995787,
+        1.0,
     ]),
-    # On this trace start 0 also happens to be the best of starts 0-3, so the
-    # two settings currently agree; that is incidental, not a requirement.
     4: np.array([
-        118.54108897749562, 0.019282883234440454, 0.10975967000621162,
-        0.8623641267910293, 0.012116298233797338, 0.012500029840650557,
-        0.11895259960846845, 0.0006392117171368307, 0.01614734298527011,
-        0.0,
+        118.86372577455545, 0.02405048793975244, 0.11039945921504166,
+        0.8558970588663514, 0.010646755386259352, 0.011885746729974006,
+        0.02941612158758953, 0.0006882123639383544, 0.4999999999946443,
+        1.0,
     ]),
 }
 

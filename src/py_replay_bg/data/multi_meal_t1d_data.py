@@ -148,7 +148,7 @@ class MultiMealT1DData:
         None
         """
         self.tsteps = int(
-            (np.array(data.t)[-1].astype(datetime) - np.array(data.t)[0].astype(datetime)).total_seconds() / (
+            (data.t.iloc[-1] - data.t.iloc[0]).total_seconds() / (
                 60) + self.yts) * environment.ts  # number of steps in the simulation with the sampling rate of the integration step
         self.tysteps = int(
             self.tsteps / self.yts)  # number of steps of the simulation, with the sampling rate of the data

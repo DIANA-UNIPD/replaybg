@@ -60,7 +60,22 @@ class LogNormal(object):
         float
             The probability density value at ``x``.
         """
-        return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((np.log(x) - self.mu) / self.sigma) ** 2)
+        return 1 / (x * self.sigma * np.sqrt(2 * np.pi)) * np.exp(- ((np.log(x) - self.mu) ** 2) / (2 * (self.sigma ** 2)))
+
+    def log_pdf(self, x):
+        """Evaluates the log of the log-normal probability density function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density. Must be positive.
+
+        Returns
+        -------
+        float
+            The log-density value at ``x``.
+        """
+        return np.log(self.evaluate(x))
 
     def cdf(self, x):
         """Evaluates the log-normal cumulative distribution function.
@@ -153,6 +168,21 @@ class Normal(object):
             The probability density value at ``x``.
         """
         return 1 / (self.sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - self.mu) / self.sigma) ** 2)
+
+    def log_pdf(self, x):
+        """Evaluates the log of the normal probability density function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density.
+
+        Returns
+        -------
+        float
+            The log-density value at ``x``.
+        """
+        return np.log(self.evaluate(x))
 
     def cdf(self, x):
         """Evaluates the normal cumulative distribution function.
@@ -251,6 +281,27 @@ class Gamma:
             return 0.0
         return np.exp(self._log_normalizer + (self.alpha - 1) * np.log(x) - self.beta * x)
 
+    def log_pdf(self, x):
+        """Evaluates the log of the Gamma probability density function.
+
+        Computed directly in log space (not as ``log(evaluate(x))``), since
+        routing through ``exp`` and back loses precision relative to the
+        closed-form log-density.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density. Must be positive.
+
+        Returns
+        -------
+        float
+            The log-density value at ``x``. Returns ``-inf`` if ``x <= 0``.
+        """
+        if x <= 0:
+            return -np.inf
+        return self.alpha * np.log(self.beta) + (self.alpha - 1.0) * np.log(x) - self.beta * x - _gammaln(self.alpha)
+
     def cdf(self, x):
         """Evaluates the Gamma cumulative distribution function.
 
@@ -348,6 +399,24 @@ class Uniform(object):
             return 0.0
         return 1.0 / (self.b - self.a)
 
+    def log_pdf(self, x):
+        """Evaluates the log of the uniform probability density function.
+
+        Parameters
+        ----------
+        x : float
+            Value at which to evaluate the density.
+
+        Returns
+        -------
+        float
+            The log-density value at ``x``. Returns ``-inf`` if ``x`` is
+            outside ``[a, b]``.
+        """
+        if x < self.a or x > self.b:
+            return -np.inf
+        return -np.log(self.b - self.a)
+
     def cdf(self, x):
         """Evaluates the uniform cumulative distribution function.
 
@@ -390,9 +459,10 @@ class Uniform(object):
 
 @njit_
 def _gammaln(x):
-    """Approximates the natural logarithm of the gamma function.
+    """Natural logarithm of the gamma function.
 
-    Uses the Lanczos approximation.
+    Wraps C99 ``lgamma`` (available in Numba nopython mode), which is correctly
+    rounded to ~1 ULP and never overflows in the range used here.
 
     Parameters
     ----------
@@ -402,24 +472,9 @@ def _gammaln(x):
     Returns
     -------
     float
-        An approximation of ``log(Gamma(x))``.
+        ``log(Gamma(x))``.
     """
-    coeffs = np.array([
-         76.18009172947146,
-        -86.50532032941677,
-         24.01409824083091,
-         -1.231739572450155,
-          0.1208650973866179e-2,
-         -0.5395239384953e-5
-    ])
-    y = x
-    tmp = x + 5.5
-    tmp -= (x + 0.5) * np.log(tmp)
-    ser = 1.000000000190015
-    for c in coeffs:
-        y += 1.0
-        ser += c / y
-    return -tmp + np.log(2.5066282746310005 * ser / x)
+    return math.lgamma(x)
 
 @njit_
 def _gammainc_lower_reg(a, x):
